@@ -236,16 +236,16 @@ After any refactoring or implementation change, check for orphaned code:
 
 1. Identify code that is now unreachable or unused
 2. List it explicitly
-3. **Ask before deleting:** "Should I remove these now-unused elements: [list]?"
+3. Remove proven orphaned code created by an authorized implementation or refactor when that cleanup is in scope. Ask when usage is uncertain, deletion changes a public contract, or removal exceeds the request. A review-only request produces findings, not edits.
 
-Don't leave dead code lying around — it confuses future readers and agents. But don't silently delete things you're not sure about. When in doubt, ask.
+Verify usage through references, exports, dynamic loading, and tests before removing code. Preserve unrelated elements. Existing cleanup authorization does not need to be requested again.
 
 ```
 DEAD CODE IDENTIFIED:
 - formatLegacyDate() in src/utils/date.ts — replaced by formatDate()
 - OldTaskCard component in src/components/ — replaced by TaskCard
 - LEGACY_API_URL constant in src/config.ts — no remaining references
-→ Safe to remove these?
+→ Verify these have no remaining consumers before removing them within the authorized refactor.
 ```
 
 ## Review Speed

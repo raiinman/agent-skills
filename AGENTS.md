@@ -2,11 +2,11 @@
 
 This file provides guidance to AI coding agents (Claude Code, Cursor, Copilot, Antigravity, etc.) when working with code in this repository.
 
-> **Scope:** This file configures agents working on the [`addyosmani/agent-skills`](https://github.com/addyosmani/agent-skills) repository itself. It is not meant to be copied into other projects or into a global agent configuration; the reusable assets are the skills in `skills/`, not this file.
+> **Scope:** This file configures agents working on the [`raiinman/agent-skills`](https://github.com/raiinman/agent-skills) personal fork of [`addyosmani/agent-skills`](https://github.com/addyosmani/agent-skills). It is not meant to be copied into other projects or into a global agent configuration; the reusable assets are the skills in `skills/`, not this file.
 
 ## Repository Overview
 
-A collection of skills for Claude.ai and Claude Code for senior software engineers. Skills are packaged instructions and scripts that extend Claude and your coding agents capabilities.
+A Codex-first personal fork of a portable engineering skill pack. Skills are packaged instructions and scripts for coding-agent workflows.
 
 ## OpenCode Integration
 
@@ -14,16 +14,16 @@ OpenCode uses a **skill-driven execution model** powered by the `skill` tool and
 
 ### Core Rules
 
-- If a task matches a skill, you MUST invoke it
+- Use the skills relevant to the task's scope and uncertainty
 - Skills are located in `skills/<skill-name>/SKILL.md`
-- Never implement directly if a skill applies
-- Always follow the skill instructions exactly (do not partially apply them)
+- Execute small, clear tasks directly with relevant verification; do not create spec or plan artifacts solely because a task changes code
+- Preserve explicit user scope, preferences, and authorization across phases
 
 ### Intent → Skill Mapping
 
 The agent should automatically map user intent to skills:
 
-- Feature / new functionality → `spec-driven-development`, then `incremental-implementation`, `test-driven-development`
+- Substantial or ambiguous feature → `spec-driven-development`, then `incremental-implementation`, `test-driven-development`
 - Planning / breakdown → `planning-and-task-breakdown`
 - Bug / failure / unexpected behavior → `debugging-and-error-recovery`
 - Code review → `code-review-and-quality`
@@ -48,30 +48,21 @@ Instead, the agent must internally follow this lifecycle:
 
 For every request:
 
-1. Determine if any skill applies (even 1% chance)
-2. Invoke the appropriate skill using the `skill` tool
-3. Follow the skill workflow strictly
-4. Only proceed to implementation after required steps (spec, plan, etc.) are complete
+1. Inspect the request, existing decisions, and relevant repository context.
+2. Select the smallest workflow that covers the task. Use the host's native skill mechanism when available.
+3. For substantial or ambiguous work, settle requirements and dependencies before implementation. Reuse an existing approved spec or plan.
+4. Continue within already-authorized scope. Ask when a consequential decision is unresolved or an action exceeds authorization; do not require a new turn merely to repeat approval.
+5. Run checks appropriate to the changed behavior and commit each verified task, preserving unrelated local work. Paid model comparisons require an explicit request.
 
 ### Anti-Rationalization
 
-The following thoughts are incorrect and must be ignored:
-
-- "This is too small for a skill"
-- "I can just quickly implement this"
-- "I’ll gather context first"
-
-Correct behavior:
-
-- Always check for and use skills first
-
-This ensures OpenCode behaves similarly to Claude Code with full workflow enforcement.
+Small scope is a reason to reduce ceremony, not to skip verification. Uncertainty is a reason to inspect the environment and clarify consequential decisions, not to invent requirements. A task explicitly limited to a spec, plan, or review ends with that deliverable; an authorized implementation continues through the relevant phases.
 
 ## Orchestration: Personas, Skills, and Commands
 
 This repo has three composable layers. They have different jobs and should not be confused:
 
-- **Skills** (`skills/<name>/SKILL.md`) — workflows with steps and exit criteria. The *how*. Mandatory hops when an intent matches.
+- **Skills** (`skills/<name>/SKILL.md`) — workflows with steps and exit criteria. The *how*. Select the relevant workflows at the depth the task needs.
 - **Personas** (`agents/<role>.md`) — roles with a perspective and an output format. The *who*.
 - **Slash commands** (`.claude/commands/*.md`) — user-facing entry points. The *when*. The orchestration layer.
 

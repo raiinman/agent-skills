@@ -1,12 +1,13 @@
 {
-  "name": "agent-skills",
-  "version": "0.6.12",
-  "description": "Production-grade engineering skills for AI coding agents — covering the full software development lifecycle from spec to ship.",
+  "name": "raiinman-agent-skills",
+  "version": "0.6.13",
+  "description": "Personal Codex-first fork of Addy Osmani's engineering workflows, with persistent authorization and task-proportional verification.",
   "author": {
-    "name": "Addy Osmani"
+    "name": "raiinman (fork); Addy Osmani (original)",
+    "url": "https://github.com/raiinman"
   },
-  "homepage": "https://github.com/addyosmani/agent-skills",
-  "repository": "https://github.com/addyosmani/agent-skills",
+  "homepage": "https://github.com/raiinman/agent-skills",
+  "repository": "https://github.com/raiinman/agent-skills",
   "license": "MIT",
   "commands": ["./.claude/commands", "./commands"],
   "skills": "./skills",

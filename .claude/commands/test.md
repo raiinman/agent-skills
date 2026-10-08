@@ -2,7 +2,7 @@
 description: Run TDD workflow — write failing tests, implement, verify. For bugs, use the Prove-It pattern.
 ---
 
-Invoke the agent-skills:test-driven-development skill.
+Invoke the raiinman-agent-skills:test-driven-development skill.
 
 For new features:
 1. Write tests that describe the expected behavior (they should FAIL)
@@ -14,6 +14,8 @@ For bug fixes (Prove-It pattern):
 2. Confirm the test fails
 3. Implement the fix
 4. Confirm the test passes
-5. Run the full test suite for regressions
+5. Run relevant regression checks and repository-required checks; broaden coverage for shared behavior or unresolved concerns
 
-For browser-related issues, also invoke agent-skills:browser-testing-with-devtools to verify with Chrome DevTools MCP.
+For documentation, static content, or configuration without behavior changes, use relevant validation rather than inventing a failing test.
+
+For browser-related issues, also invoke raiinman-agent-skills:browser-testing-with-devtools to verify with Chrome DevTools MCP.

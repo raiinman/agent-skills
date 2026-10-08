@@ -2,7 +2,7 @@
 description: Simplify code for clarity and maintainability — reduce complexity without changing behavior
 ---
 
-Invoke the agent-skills:code-simplification skill.
+Invoke the raiinman-agent-skills:code-simplification skill.
 
 Simplify recently changed code (or the specified scope) while preserving exact behavior:
 
@@ -15,8 +15,8 @@ Simplify recently changed code (or the specified scope) while preserving exact b
    - Nested ternaries → if/else or switch
    - Generic names → descriptive names
    - Duplicated logic → shared functions
-   - Dead code → remove after confirming
+   - Dead code → verify no consumers and remove within the authorized scope
 5. Apply each simplification incrementally — run tests after each change
-6. Verify all tests pass, the build succeeds, and the diff is clean
+6. Verify relevant regression and required repository checks pass, affected builds succeed, and the diff is scoped and clean
 
 If tests fail after a simplification, revert that change and reconsider. Use `code-review-and-quality` to review the result.

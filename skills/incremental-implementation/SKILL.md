@@ -36,10 +36,12 @@ Build in thin vertical slices — implement one piece, test it, verify it, then 
 For each slice:
 
 1. **Implement** the smallest complete piece of functionality
-2. **Test** — run the test suite (or write a test if none exists)
+2. **Test** — run checks relevant to the changed behavior; apply TDD for new or fixed behavior, and content/configuration checks for static edits
 3. **Verify** — confirm the slice works as expected (tests pass, build succeeds, manual check)
 4. **Commit** -- save your progress with a descriptive message (see `git-workflow-and-versioning` for atomic commit guidance)
 5. **Move to the next slice** — carry forward, don't restart
+
+Continue through the authorized tasks without asking again at every slice. If the request is limited to one task, stop there. Ask when a consequential unresolved decision or an action outside authorization blocks the next task. Keep automatic commits scoped to the task's files; never absorb unrelated local changes.
 
 ## Slicing Strategies
 
@@ -142,7 +144,7 @@ Each increment changes one logical thing. Don't mix concerns:
 
 ### Rule 2: Keep It Compilable
 
-After each increment, the project must build and existing tests must pass. Don't leave the codebase in a broken state between slices.
+Each increment must preserve a working state. Verify builds and regression behavior affected by the change, plus repository-required checks. A static edit does not require an unrelated build; a shared executable change needs broader coverage. Don't leave the codebase broken between slices.
 
 ### Rule 3: Feature Flags for Incomplete Features
 
@@ -201,10 +203,10 @@ Be explicit about what's in scope and what's NOT in scope for each increment.
 After each increment, verify with the repository's own commands (see the test-driven-development skill's Discover the Stack First section):
 
 - [ ] The change does one thing and does it completely
-- [ ] All existing tests still pass (the repository's test command: `npm test`, `./gradlew test`, `pytest`, ...)
-- [ ] The build succeeds (the repository's build command)
-- [ ] Type checking passes, where the stack has one (`npx tsc --noEmit`, `mypy`, ...)
-- [ ] Linting passes (the repository's lint command)
+- [ ] Relevant tests pass, with broader regression coverage for shared behavior and required repository checks
+- [ ] The build succeeds when the changed files affect it
+- [ ] Type checking passes when applicable (`npx tsc --noEmit`, `mypy`, ...)
+- [ ] Relevant linting or content validation passes
 - [ ] The new functionality works as expected
 - [ ] The change is committed with a descriptive message
 
@@ -239,10 +241,10 @@ After each increment, verify with the repository's own commands (see the test-dr
 After completing all increments for a task:
 
 - [ ] Each increment was individually tested and committed
-- [ ] The full test suite passes
-- [ ] The build is clean
+- [ ] Relevant regression checks and required repository checks pass
+- [ ] The build is clean when affected
 - [ ] The feature works end-to-end as specified
-- [ ] No uncommitted changes remain
+- [ ] No uncommitted task changes remain; unrelated pre-existing work is preserved
 
 ## See Also
 

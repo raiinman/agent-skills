@@ -16,13 +16,13 @@ The two are complementary. A task is done only when **its** acceptance criteria 
 
 ## The Standing Checklist
 
-Apply this to every change before declaring it done.
+Apply the relevant items to every change before declaring it done. Keep the quality bar stable while scaling checks to the changed behavior and risk. For documentation, static content, or configuration with no behavior change, validate the content and affected configuration instead of inventing a failing test or running unrelated runtime checks. Repository-mandated checks still apply. Report checks that could not be run and the behavior they leave unverified.
 
 ### Correctness
 - [ ] All acceptance criteria for the task are met
-- [ ] Code runs and behaves as intended, verified at runtime, not just compiled or typechecked
-- [ ] New behavior is covered by tests that fail without the change and pass with it
-- [ ] Existing tests still pass; no regressions introduced
+- [ ] Affected runtime behavior is verified where the change alters executable behavior
+- [ ] New or fixed behavior has meaningful tests that fail without the change and pass with it
+- [ ] Relevant existing tests pass; broader regression checks cover shared behavior and repository requirements
 - [ ] Edge cases and error paths are handled, not just the happy path
 
 ### Quality
@@ -48,7 +48,7 @@ The depth behind these items lives in `code-review-and-quality` (the five-axis r
 - [ ] Security implications reviewed for any untrusted input, auth, or data handling (see `security-and-hardening`)
 - [ ] Observability in place for new critical paths (logs, metrics, traces) (see `observability-and-instrumentation`)
 - [ ] Rollback path exists for anything risky (see `shipping-and-launch`)
-- [ ] The human has reviewed and approved before merge or deploy
+- [ ] Any required review or merge/deploy authorization is satisfied; existing explicit authorization is honored within its scope
 
 ## How to Apply
 
@@ -56,7 +56,7 @@ The depth behind these items lives in `code-review-and-quality` (the five-axis r
 - **Per feature**: confirm Integration and Documentation before considering the feature complete.
 - **Per release**: the full checklist is the floor; `shipping-and-launch` adds the deploy-specific gates on top.
 
-Tailor the list to the project once, then reuse it unchanged. A Definition of Done that is renegotiated every sprint is not a Definition of Done.
+Tailor the standing requirements to the project once, then choose applicable checks per change. Broaden verification when new changes, failures, or unresolved concerns justify it. Do not lower the bar to meet a deadline or rerun unchanged successful checks as a substitute for progress.
 
 ## Red Flags
 

@@ -7,13 +7,13 @@ description: Creates specs before coding. Use when starting a new project, featu
 
 ## Overview
 
-Write a structured specification before writing any code. The spec is the shared source of truth between you and the human engineer — it defines what we're building, why, and how we'll know it's done. Code without a spec is guessing.
+Write a structured specification when substantial work or unresolved requirements need a shared source of truth. It defines what we're building, why, and how we'll know it's done. Reuse settled requirements rather than generating a duplicate spec.
 
 ## When to Use
 
 - Starting a new project or feature
 - Requirements are ambiguous or incomplete
-- The change touches multiple files or modules
+- The change spans capabilities whose boundaries or dependencies need agreement
 - You're about to make an architectural decision
 - The task would take more than 30 minutes to implement
 
@@ -21,14 +21,14 @@ Write a structured specification before writing any code. The spec is the shared
 
 ## The Gated Workflow
 
-Spec-driven development has four phases, preceded by a scope check (Phase 0) that activates only when one request bundles several independently testable capabilities. Do not advance to the next phase until the current one is validated.
+Spec-driven development has four phases, preceded by a scope check (Phase 0) that activates only when one request bundles several independently testable capabilities. Validate each phase against the agreed scope. Prior authorization carries forward; validation does not require a separate approval turn when the necessary decisions are already settled. A request for specification only ends after the spec.
 
 ```
 SPECIFY ──→ PLAN ──→ TASKS ──→ IMPLEMENT
    │          │        │          │
    ▼          ▼        ▼          ▼
- Human      Human    Human      Human
- reviews    reviews  reviews    reviews
+ Validate   Validate Validate   Verify
+ scope      order    criteria   behavior
 ```
 
 ### Phase 0: Scope Check
@@ -60,13 +60,13 @@ Build order: identity → billing, notifications → reporting
 - **Dependency direction, no cycles.** Arrows point one way. If two modules each need the other, they are one module.
 - **Interfaces live at the boundary.** The map records that `billing` depends on `identity`; the contract between them belongs in the provider module's spec (see `api-and-interface-design` for designing it).
 
-**The map is gated like every phase.** The human reviews module boundaries, dependency direction, and build order before any module spec is written. Getting the map wrong is expensive; reviewing ten lines is not.
+**Settle the map before module specs.** Request review when module boundaries, dependency direction, or build order need a consequential decision. Reuse an already-approved map. If the user has authorized proceeding and these choices fit the agreed requirements, record the map and continue without asking for the same approval again.
 
 **Then recurse per module.** Run Specify → Plan → Tasks → Implement for each module in dependency order. Each module gets its own spec, scoped to that module's objective, boundaries, and success criteria. Save the approved map at the project root and each module's spec alongside it, named by module id (`SPEC-identity.md`, `SPEC-billing.md`) — the map, not filename guessing, is the index of what exists.
 
 ### Phase 1: Specify
 
-Start with a high-level vision. Ask the human clarifying questions until requirements are concrete.
+Start with the request and existing decisions. Inspect available context, then ask about consequential gaps that remain before writing the spec.
 
 **Surface assumptions immediately.** Before writing any spec content, list what you're assuming:
 
@@ -109,7 +109,7 @@ Don't silently fill in ambiguous requirements. The spec's entire purpose is to s
 
 6. **Boundaries** — Three-tier system:
    - **Always do:** Run tests before commits, follow naming conventions, validate inputs
-   - **Ask first:** Database schema changes, adding dependencies, changing CI config
+   - **Ask first:** Unresolved schema, dependency, or CI decisions that exceed the agreed scope or permissions
    - **Never do:** Commit secrets, edit vendor directories, remove failing tests without approval
 
 **Spec template:**
@@ -167,11 +167,12 @@ REFRAMED SUCCESS CRITERIA:
 
 This lets you loop, retry, and problem-solve toward a clear goal rather than guessing what "faster" means.
 
-**Stop after writing the spec (CRITICAL).** Once the spec is saved:
+**Honor the requested stopping point.** Once the spec is saved:
 
 1. Summarize it and list any Open Questions.
-2. Ask the human to approve it or request changes.
-3. **STOP YOUR TURN IMMEDIATELY.** Do NOT start Phase 2, invoke `planning-and-task-breakdown`, or write code in this turn. Planning starts only after the human approves the spec in a later turn.
+2. If the user requested only a spec or reserved review before implementation, present it and stop.
+3. If a consequential decision remains unresolved, request it and wait before dependent work.
+4. If implementation is already authorized and the spec reflects settled decisions, continue to planning and implementation in the same session. Record the authorization instead of requiring a later-turn approval.
 
 ### Phase 2: Plan
 
@@ -241,19 +242,19 @@ The spec is a living document, not a one-time artifact:
 - Implementing features not mentioned in any spec or task list
 - Making architectural decisions without documenting them
 - Skipping the spec because "it's obvious what to build"
-- Writing the spec and starting the plan or code in the same turn
+- Advancing beyond a spec-only request, reserved review, or consequential unresolved decision
 - One spec whose requirements span several independently testable capabilities
-- Module boundaries or build order decided implicitly during implementation because no capability map was approved up front
+- Module boundaries or build order left unresolved during implementation because no capability map was settled up front
 
 ## Verification
 
 Before proceeding to implementation, confirm:
 
 - [ ] The spec covers all six core areas
-- [ ] The human has reviewed and approved the spec
-- [ ] The turn ended after saving the spec; approval came in a later turn
+- [ ] The spec reflects accepted requirements and applicable authorization; unresolved consequential decisions are surfaced
+- [ ] The requested stopping point was honored; prior implementation authorization was carried forward
 - [ ] Success criteria are specific and testable
 - [ ] Boundaries (Always/Ask First/Never) are defined
 - [ ] The spec is saved to a file in the repository
-- [ ] If the request bundles several independently testable capabilities, a capability map (module ids, dependency direction, build order) was approved before any module spec was written
+- [ ] If the request bundles several independently testable capabilities, a capability map (module ids, dependency direction, build order) was settled within authorization before module specs were written
 - [ ] Every module spec traces to a module id in the approved map

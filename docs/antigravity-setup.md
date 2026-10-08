@@ -11,23 +11,23 @@ Antigravity CLI has a first-class [plugin system](https://www.agy.dev/docs/plugi
 **Install from the remote repository:**
 
 ```bash
-agy plugin install https://github.com/addyosmani/agent-skills.git
+agy plugin install https://github.com/raiinman/agent-skills.git
 ```
 
 **Install from a local clone:**
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/addyosmani/agent-skills.git
+   git clone https://github.com/raiinman/agent-skills.git
    ```
 2. Install the plugin using `agy`:
    ```bash
    agy plugin install /path/to/agent-skills
    ```
 
-This will validate the plugin and install it into your global Antigravity configuration directory (`~/.gemini/config/plugins/agent-skills/`).
+This will validate the plugin and install it into your global Antigravity configuration directory (`~/.gemini/config/plugins/raiinman-agent-skills/`).
 
-> **Note:** on current agy releases the plugin lands under `~/.gemini/config/plugins/`, not the legacy `~/.gemini/antigravity-cli/plugins/` path used by older versions. If you don't see the plugin at the legacy path, check `~/.gemini/config/plugins/agent-skills/` first.
+> **Note:** on current agy releases the plugin lands under `~/.gemini/config/plugins/`, not the legacy `~/.gemini/antigravity-cli/plugins/` path used by older versions. If you don't see the plugin at the legacy path, check `~/.gemini/config/plugins/raiinman-agent-skills/` first.
 
 ### Option 2: Import from Gemini CLI
 
@@ -51,14 +51,14 @@ Use the native plugin skills directly while that importer limitation applies:
 
 | Intended wrapper | Direct Antigravity invocation | Notes |
 |------------------|-------------------------------|-------|
-| `/spec` | `/agent-skills:spec-driven-development` | Writes a structured spec before code |
-| `/constraints` | `/agent-skills:constraint-driven-development` | Defines and enforces the project's quality bar |
-| `/planning` | `/agent-skills:planning-and-task-breakdown` | Antigravity's built-in `/planning` command is a separate plan-mode control |
-| `/build` | `/agent-skills:incremental-implementation` | Also invoke `/agent-skills:test-driven-development`; wrapper-only `/build auto` orchestration is unavailable |
-| `/test` | `/agent-skills:test-driven-development` | Runs the red-green-refactor workflow |
-| `/review` | `/agent-skills:code-review-and-quality` | Runs the five-axis review workflow |
-| `/code-simplify` | `/agent-skills:code-simplification` | Simplifies without changing behavior |
-| `/ship` | `/agent-skills:shipping-and-launch` | The wrapper's automatic persona fan-out is unavailable; invoke specialist agents separately |
+| `/spec` | `/raiinman-agent-skills:spec-driven-development` | Writes a structured spec before code |
+| `/constraints` | `/raiinman-agent-skills:constraint-driven-development` | Defines and enforces the project's quality bar |
+| `/planning` | `/raiinman-agent-skills:planning-and-task-breakdown` | Antigravity's built-in `/planning` command is a separate plan-mode control |
+| `/build` | `/raiinman-agent-skills:incremental-implementation` | Also invoke `/raiinman-agent-skills:test-driven-development`; wrapper-only `/build auto` orchestration is unavailable |
+| `/test` | `/raiinman-agent-skills:test-driven-development` | Runs the red-green-refactor workflow |
+| `/review` | `/raiinman-agent-skills:code-review-and-quality` | Runs the five-axis review workflow |
+| `/code-simplify` | `/raiinman-agent-skills:code-simplification` | Simplifies without changing behavior |
+| `/ship` | `/raiinman-agent-skills:shipping-and-launch` | The wrapper's automatic persona fan-out is unavailable; invoke specialist agents separately |
 | `/webperf` | Select `web-performance-auditor` from `/agents` | This workflow is a persona, not a skill |
 
 Do not add YAML frontmatter to the TOML files as a workaround. Gemini CLI reads the parallel TOML command format with a strict parser, and `---` frontmatter makes those files invalid TOML without changing Antigravity's conversion behavior.
@@ -80,7 +80,7 @@ To validate that your local plugin is correctly structured and contains all skil
 agy plugin validate /path/to/agent-skills
 ```
 
-Then start a fresh session and type `/agent-skills:` to inspect the namespaced skill catalog. If the validator reports that commands were converted but `/build` returns `No matches`, use the direct invocations above; reinstalling or adding a TOML `name` field does not resolve the known importer limitation.
+Then start a fresh session and type `/raiinman-agent-skills:` to inspect the namespaced skill catalog. If the validator reports that commands were converted but `/build` returns `No matches`, use the direct invocations above; reinstalling or adding a TOML `name` field does not resolve the known importer limitation.
 
 ---
 

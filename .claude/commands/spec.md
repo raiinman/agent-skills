@@ -2,9 +2,9 @@
 description: Start spec-driven development — write a structured specification before writing code
 ---
 
-Invoke the agent-skills:spec-driven-development skill.
+Invoke the raiinman-agent-skills:spec-driven-development skill.
 
-Begin by understanding what the user wants to build. Ask clarifying questions about:
+Begin with the request and existing accepted decisions. Inspect available context, then clarify consequential gaps about:
 1. The objective and target users
 2. Core features and acceptance criteria
 3. Tech stack preferences and constraints
@@ -12,6 +12,6 @@ Begin by understanding what the user wants to build. Ask clarifying questions ab
 
 Then generate a structured spec covering all six core areas: objective, commands, project structure, code style, testing strategy, and boundaries.
 
-If the request bundles several independently testable capabilities, first propose a capability map (module ids, dependency direction, build order) per the skill's Phase 0 and get it approved, then spec each module in dependency order.
+If the request bundles several independently testable capabilities, settle a capability map (module ids, dependency direction, build order) per the skill's Phase 0, reusing prior decisions and authorization, then spec each module in dependency order.
 
-Save the spec as SPEC.md in the project root and confirm with the user before proceeding.
+Save the spec as SPEC.md in the project root or use the project's existing spec format. A spec-only request ends here. If implementation is already authorized and no consequential decision remains, continue without a repeated approval turn; otherwise present the needed decision and wait before dependent work.

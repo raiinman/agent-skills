@@ -2,6 +2,8 @@
 
 Thanks for your interest in contributing! This project is a collection of production-grade engineering skills for AI coding agents.
 
+This personal fork prioritizes Codex. Carry forward accepted authorization, scale workflow and checks to the task, and retain per-task commits. Paid model comparisons run only when explicitly requested. Personal changes target this fork; upstream attribution and shared skill formats remain intact. See [the Codex guide](docs/codex-setup.md) for the supported installation and workflow.
+
 New here? [docs/developer-onboarding.md](docs/developer-onboarding.md) is a guided tour of how the repo fits together (the five layers, the verification loop, and the contribution paths) and tells you when to read this document, [skill-anatomy.md](docs/skill-anatomy.md), and [evals/README.md](evals/README.md). This file is the authoritative rulebook; the onboarding guide is the map.
 
 ## Adding a New Skill

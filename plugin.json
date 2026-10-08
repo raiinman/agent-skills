@@ -1,5 +1,9 @@
 {
-  "name": "agent-skills",
-  "version": "0.6.12",
-  "description": "Production-grade engineering skills for AI coding agents."
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "raiinman-agent-skills",
+  "version": "0.6.13",
+  "description": "Personal Codex-first fork of Addy Osmani's engineering workflows, with persistent authorization and task-proportional verification.",
+  "homepage": "https://github.com/raiinman/agent-skills",
+  "repository": "https://github.com/raiinman/agent-skills",
+  "license": "MIT"
 }
