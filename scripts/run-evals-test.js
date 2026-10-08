@@ -8,9 +8,32 @@ const os = require('node:os');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 const test = require('node:test');
-const { materializeWorkspace, parseGrading, clearGradingSlot, persistGradingOutcome, extractExecutorModel } = require('./run-evals');
+const { materializeWorkspace, parseGrading, clearGradingSlot, persistGradingOutcome, extractExecutorModel, tokenize, buildCorpus, rankSkills } = require('./run-evals');
 
 const RUNNER = path.join(__dirname, 'run-evals.js');
+
+test('routing bridges common abbreviations without conflating authentication and authorization', () => {
+  for (const [short, long] of [['docs', 'documentation'], ['doc', 'document'], ['config', 'configuration'],
+    ['auth', 'authentication'], ['deps', 'dependencies'], ['repo', 'repository']]) {
+    assert.deepEqual(tokenize(short), tokenize(long), `${short} should match ${long}`);
+  }
+  assert.notDeepEqual(tokenize('authentication'), tokenize('authorization'));
+});
+
+test('realistic clipped prompts route to the same owning skills as their long forms', () => {
+  const skills = fs.readdirSync(path.join(__dirname, '..', 'skills')).map((name) => ({
+    name,
+    description: fs.readFileSync(path.join(__dirname, '..', 'skills', name, 'SKILL.md'), 'utf8')
+      .match(/^description: (.+)$/m)[1],
+  }));
+  const corpus = buildCorpus(skills);
+  for (const [prompt, owner] of [
+    ['Add auth to our API endpoints', 'security-and-hardening'],
+    ['Our docs are out of date with the code', 'documentation-and-adrs'],
+  ]) {
+    assert.ok(rankSkills(prompt, corpus).slice(0, 3).some((item) => item.name === owner), prompt);
+  }
+});
 
 function writeJson(file, value) {
   fs.mkdirSync(path.dirname(file), { recursive: true });

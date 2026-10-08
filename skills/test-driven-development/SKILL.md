@@ -48,7 +48,7 @@ The examples below use TypeScript for illustration; the workflow is identical in
 
 ### Step 1: RED — Write a Failing Test
 
-Write the test first. It must fail. A test that passes immediately proves nothing.
+For new behavior or a bug fix, write a test that fails for the intended missing behavior before changing the implementation. Confirm the failure is the target assertion, not a setup, import, or syntax error. Characterization tests for behavior-preserving refactors should pass against the original code: they record the contract to preserve. Do not manufacture a failure by breaking working code or weakening an assertion.
 
 ```typescript
 // RED: This test fails because createTask doesn't exist yet

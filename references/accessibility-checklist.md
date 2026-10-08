@@ -31,7 +31,7 @@ Quick reference for WCAG 2.1 AA compliance. Use alongside the `frontend-ui-engin
 - [ ] Tables have `<th>` headers with scope
 
 ### Visual
-- [ ] Text contrast ≥ 4.5:1 (normal text) or ≥ 3:1 (large text, 18px+)
+- [ ] Text contrast ≥ 4.5:1 (normal text) or ≥ 3:1 (large text: ≥24 CSS px regular or ≥18.67 CSS px bold, equivalent to 18pt/14pt)
 - [ ] UI components contrast ≥ 3:1 against background
 - [ ] Color is not the only way to convey information
 - [ ] Text resizable to 200% without breaking layout
@@ -115,7 +115,7 @@ Quick reference for WCAG 2.1 AA compliance. Use alongside the `frontend-ui-engin
 <ul role="list" aria-label="Tasks">
   <li>
     <input type="checkbox" id="task-1" aria-label="Complete: Buy groceries" />
-    <label htmlFor="task-1">Buy groceries</label>
+    <label for="task-1">Buy groceries</label>
   </li>
 </ul>
 ```
@@ -124,8 +124,8 @@ Quick reference for WCAG 2.1 AA compliance. Use alongside the `frontend-ui-engin
 
 ```bash
 # Automated audit
-npx axe-core          # Programmatic accessibility testing
-npx pa11y             # CLI accessibility checker
+npx @axe-core/cli http://localhost:3000  # running app required
+npx pa11y http://localhost:3000          # CLI accessibility checker
 
 # In browser
 # Chrome DevTools → Lighthouse → Accessibility

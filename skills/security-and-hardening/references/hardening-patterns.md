@@ -39,7 +39,7 @@ app.use(session({
   cookie: {
     httpOnly: true,     // Not accessible via JavaScript
     secure: true,       // HTTPS only
-    sameSite: 'lax',    // CSRF protection
+    sameSite: 'lax',    // one CSRF layer; also protect state-changing requests
     maxAge: 24 * 60 * 60 * 1000,  // 24 hours
   },
 }));
@@ -159,7 +159,7 @@ The `range() !== 'unicast'` check covers loopback, link-local `169.254.169.254` 
 import { z } from 'zod';
 
 const CreateTaskSchema = z.object({
-  title: z.string().min(1).max(200).trim(),
+  title: z.string().trim().min(1).max(200),
   description: z.string().max(2000).optional(),
   priority: z.enum(['low', 'medium', 'high']).default('medium'),
   dueDate: z.string().datetime().optional(),

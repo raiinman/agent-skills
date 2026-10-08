@@ -57,6 +57,8 @@ Pull Request Opened
 
 ### Basic CI Pipeline
 
+Adapt these Node examples to the repository's actual commands and pinned runtime/package manager. Before dependency execution, establish the install-script policy from `security-and-hardening`: bootstrap with scripts disabled, review required lifecycle scripts, and run only explicitly approved rebuild steps. A later audit does not undo a malicious install script.
+
 ```yaml
 # .github/workflows/ci.yml
 name: CI
@@ -79,7 +81,7 @@ jobs:
           cache: 'npm'
 
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --ignore-scripts
 
       - name: Lint
         run: npm run lint
@@ -102,13 +104,15 @@ jobs:
 ```yaml
   integration:
     runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: postgresql://ci_user:ci-only-disposable@localhost:5432/testdb
     services:
       postgres:
         image: postgres:16
         env:
           POSTGRES_DB: testdb
           POSTGRES_USER: ci_user
-          POSTGRES_PASSWORD: ${{ secrets.CI_DB_PASSWORD }}
+          POSTGRES_PASSWORD: ci-only-disposable
         ports:
           - 5432:5432
         options: >-
@@ -123,18 +127,17 @@ jobs:
         with:
           node-version: '22'
           cache: 'npm'
-      - run: npm ci
+      - run: npm ci --ignore-scripts
+      # Prisma CLI/client and schema are pinned and reviewed project dependencies.
+      - name: Generate Prisma client explicitly
+        run: npx prisma generate
       - name: Run migrations
         run: npx prisma migrate deploy
-        env:
-          DATABASE_URL: postgresql://ci_user:${{ secrets.CI_DB_PASSWORD }}@localhost:5432/testdb
       - name: Integration tests
         run: npm run test:integration
-        env:
-          DATABASE_URL: postgresql://ci_user:${{ secrets.CI_DB_PASSWORD }}@localhost:5432/testdb
 ```
 
-> **Note:** Even for CI-only test databases, use GitHub Secrets for credentials rather than hardcoding values. This builds good habits and prevents accidental reuse of test credentials in other contexts.
+> **Disposable CI database only:** this public test credential protects no real data and is never reused outside the job. Fork and Dependabot PRs do not receive repository secrets, so ordinary PR tests must work without them. Keep production/staging credentials in protected deployment jobs; never run untrusted PR code with production access to make tests work.
 
 ### E2E Tests
 
@@ -147,7 +150,7 @@ jobs:
         with:
           node-version: '22'
           cache: 'npm'
-      - run: npm ci
+      - run: npm ci --ignore-scripts
       - name: Install Playwright
         run: npx playwright install --with-deps chromium
       - name: Build
@@ -255,7 +258,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version to rollback to'
+        description: 'Previous deployment ID or URL'
         required: true
 
 jobs:
@@ -263,9 +266,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Rollback deployment
+        shell: bash
+        env:
+          ROLLBACK_TARGET: ${{ inputs.version }}
         run: |
-          # Deploy the specified previous version
-          npx vercel rollback ${{ inputs.version }}
+          set -euo pipefail
+          # Treat workflow input as one argument, never as shell source.
+          [[ "$ROLLBACK_TARGET" =~ ^[A-Za-z0-9][A-Za-z0-9._:/-]*$ ]] || exit 1
+          # Requires the pinned, authenticated CLI and intended project context.
+          vercel rollback "$ROLLBACK_TARGET" --yes
 ```
 
 ## Environment Management
@@ -335,7 +344,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: '22', cache: 'npm' }
-      - run: npm ci
+      - run: npm ci --ignore-scripts
       - run: npm run lint
 
   typecheck:
@@ -344,7 +353,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: '22', cache: 'npm' }
-      - run: npm ci
+      - run: npm ci --ignore-scripts
       - run: npx tsc --noEmit
 
   test:
@@ -353,7 +362,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: '22', cache: 'npm' }
-      - run: npm ci
+      - run: npm ci --ignore-scripts
       - run: npm test -- --coverage
 ```
 

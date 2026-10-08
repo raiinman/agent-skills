@@ -29,7 +29,7 @@ const allTasks = await db.tasks.findMany();
 const tasks = await db.tasks.findMany({
   take: 20,
   skip: (page - 1) * 20,
-  orderBy: { createdAt: 'desc' },
+  orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], // unique order, including ties
 });
 ```
 
@@ -153,15 +153,16 @@ const pool = new Pool({
 ## Unnecessary Re-renders (React)
 
 ```tsx
-// BAD: Creates new object on every render, causing children to re-render
+// BAD: A fresh object defeats a memoized child's prop comparison
 function TaskList() {
   return <TaskFilters options={{ sortBy: 'date', order: 'desc' }} />;
 }
 
-// GOOD: Stable reference
+// GOOD: Stable reference plus an actual memoization boundary
 const DEFAULT_OPTIONS = { sortBy: 'date', order: 'desc' } as const;
+const MemoizedTaskFilters = React.memo(TaskFilters);
 function TaskList() {
-  return <TaskFilters options={DEFAULT_OPTIONS} />;
+  return <MemoizedTaskFilters options={DEFAULT_OPTIONS} />;
 }
 
 // Use React.memo for expensive components

@@ -79,14 +79,21 @@ logger.warn({
 **Correlation IDs are mandatory.** Generate (or accept) a request ID at the system boundary and attach it to every log line, span, and outbound call. Without it, you cannot reconstruct a single request from interleaved logs:
 
 ```typescript
-// Express: child logger per request, ID propagated downstream
+// Express: public boundary, server identity propagated downstream
 app.use((req, res, next) => {
-  req.id = req.headers['x-request-id'] ?? crypto.randomUUID();
-  req.log = logger.child({ requestId: req.id });
+  req.id = crypto.randomUUID();
+  const clientId = req.headers['x-request-id'];
+  const validClientId = typeof clientId === 'string' && /^[A-Za-z0-9._-]{1,64}$/.test(clientId);
+  req.log = logger.child({
+    requestId: req.id,
+    ...(validClientId ? { clientRequestId: clientId } : {}),
+  });
   res.setHeader('x-request-id', req.id);
   next();
 });
 ```
+
+At a public boundary, a caller's correlation header is bounded, optional metadata, not the server's identity or an authorization claim. Reuse an upstream request ID only when the upstream is trusted and its format is validated. Continue the server ID through internal calls and queue metadata.
 
 **When several entry points write to one log, name the entry point.** A correlation ID identifies a run; it does not say which code path started it. The same job reached by a scheduler, by a replay endpoint, and by a manual CLI run produces interchangeable lines in one sink, so attributing a line falls back to elimination — cross-reading the scheduler's history, the process table, a deploy log — and that argument holds only as long as those external records happen to still exist. Stamp the entry point where the run starts, next to the correlation ID, and propagate both the same way:
 
@@ -147,7 +154,7 @@ const sdk = new NodeSDK({
 sdk.start();
 ```
 
-Add manual spans only around meaningful internal units of work (e.g., `applyDiscounts`, `chargeProvider`) and attach the attributes on-call will filter by. Propagate context across every async boundary — HTTP headers, queue message metadata — or the trace dies at the gap. Sample head-based at a low rate by default; keep 100% of errors if your backend supports tail sampling.
+Add manual spans only around meaningful internal units of work (e.g., `applyDiscounts`, `chargeProvider`) and attach the attributes on-call will filter by. Propagate context across every async boundary — HTTP headers, queue message metadata — or the trace dies at the gap. Choose a sampling strategy with an explicit cost and retention target. Low-rate head sampling reduces collection cost, but downstream tail sampling cannot recover traces discarded upstream. To retain every error trace, record and export every candidate trace to a suitably sized tail sampler, then retain errors there; otherwise state the error coverage limit.
 
 ### 6. Alerting
 

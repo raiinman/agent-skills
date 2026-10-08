@@ -214,21 +214,36 @@ Every component must meet these standards:
 ```tsx
 // Move focus when content changes
 function Dialog({ isOpen, onClose }: DialogProps) {
+  const dialogRef = useRef<HTMLDialogElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
+  const titleId = useId();
 
   useEffect(() => {
-    if (isOpen) closeRef.current?.focus();
+    const dialog = dialogRef.current;
+    if (!dialog || !isOpen) return;
+    const returnFocus = document.activeElement as HTMLElement | null;
+    dialog.showModal();
+    closeRef.current?.focus();
+    return () => {
+      if (dialog.open) dialog.close();
+      if (returnFocus?.isConnected) returnFocus.focus();
+    };
   }, [isOpen]);
 
-  // Trap focus inside dialog when open
+  // showModal makes the background inert and constrains keyboard focus.
+  // All dismissals update the controlled isOpen state through onClose.
   return (
-    <dialog open={isOpen}>
+    <dialog ref={dialogRef} aria-labelledby={titleId}
+      onCancel={(event) => { event.preventDefault(); onClose(); }}>
+      <h2 id={titleId}>Task details</h2>
       <button ref={closeRef} onClick={onClose}>Close</button>
       {/* dialog content */}
     </dialog>
   );
 }
 ```
+
+Setting the `open` attribute alone creates a non-modal dialog. Test Tab/Shift+Tab, Escape, initial focus, and focus restoration in a real browser; JSX inspection alone does not establish keyboard behavior.
 
 ### Meaningful Empty and Error States
 

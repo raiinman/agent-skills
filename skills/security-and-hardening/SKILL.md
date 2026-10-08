@@ -1,6 +1,6 @@
 ---
 name: security-and-hardening
-description: Hardens code against vulnerabilities. Use when auditing an input handler for vulnerabilities, when handling user input, authentication, data storage, or external integrations, or when checking a login flow is safe against the OWASP Top Ten. Use when building any feature that accepts untrusted data, manages user sessions, or interacts with third-party services. Use when auditing dependencies for known vulnerabilities, triaging package-manager audit findings, or assessing supply-chain risk in a new package. Use when personal data or privacy compliance (GDPR, CCPA) is involved.
+description: Hardens code against vulnerabilities. Use when auditing an input handler for vulnerabilities, when handling user input, adding authentication to API endpoints, protecting authorization, data storage, or external integrations, or when checking a login flow is safe against the OWASP Top Ten. Use when building any feature that accepts untrusted data, manages user sessions, or interacts with third-party services. Use when auditing dependencies for known vulnerabilities, triaging package-manager audit findings, or assessing supply-chain risk in a new package. Use when personal data or privacy compliance (GDPR, CCPA) is involved.
 ---
 
 # Security and Hardening
@@ -52,7 +52,9 @@ If you can't name the trust boundaries for a feature, you're not ready to secure
 - **Use httpOnly, secure, sameSite cookies** for sessions
 - **Run the detected package manager's native audit** against the committed lockfile before every release
 
-### Ask First (Requires Human Approval)
+### Consequential Changes: Check Existing Authorization
+
+Carry forward the user's request and accepted decisions. Implement the changes below when that authorization covers them. Ask before dependent work only when a consequential choice remains unresolved or the change exceeds the authorized scope.
 
 - Adding new authentication flows or changing auth logic
 - Storing new categories of sensitive data (PII, payment info)
@@ -87,7 +89,7 @@ Patterns: [Injection](references/hardening-patterns.md#injection), [XSS](referen
 ### Authentication and sessions
 
 - Hash passwords with bcrypt (≥12 rounds), scrypt, or argon2. The session secret comes from the environment, never from code.
-- Session cookies are `httpOnly`, `secure`, and `sameSite: 'lax'` or `'strict'` (the CSRF defense; `'none'` sends the cookie on cross-site requests), with a bounded `maxAge`.
+- Session cookies are `httpOnly`, `secure`, and use an appropriate `sameSite` policy with a bounded `maxAge`. SameSite is one CSRF layer: sibling subdomains can be same-site, and Lax permits some cross-site navigation. Protect state-changing requests with the framework's CSRF mechanism and appropriate origin or Fetch Metadata checks; keep GET read-only. Cross-site cookie use (`'none'`) requires Secure and an explicit CSRF defense.
 
 Pattern: [Authentication](references/hardening-patterns.md#broken-authentication).
 

@@ -37,7 +37,7 @@ DETECT ──→ FETCH ──→ IMPLEMENT ──→ CITE
 
 ### Step 1: Detect Stack and Versions
 
-Read the project's dependency file to identify exact versions:
+Read manifests to identify the stack and declared version ranges, then lockfiles and the installed/runtime environment to identify resolved versions. A range such as `^19.0.0` is not proof of the running release. Prefer the checked-in lockfile for reproducible dependency choices and verify deployment/runtime versions when they determine compatibility:
 
 ```
 package.json    → Node/React/Vue/Angular/Svelte
@@ -52,13 +52,13 @@ State what you found explicitly:
 
 ```
 STACK DETECTED:
-- React 19.1.0 (from package.json)
+- React 19.1.0 (resolved lockfile version; manifest declares ^19.0.0)
 - Vite 6.2.0
 - Tailwind CSS 4.0.3
 → Fetching official docs for the relevant patterns.
 ```
 
-If versions are missing or ambiguous, **ask the user**. Don't guess — the version determines which patterns are correct.
+Resolve ordinary ambiguity from lockfiles, package metadata, repository wrappers, CI, and runtime version output first. Ask the user only when a consequential version choice remains unresolved. If the exact deployed version cannot be established, state the evidence and compatibility range rather than claiming an exact release.
 
 ### Step 2: Fetch Official Documentation
 

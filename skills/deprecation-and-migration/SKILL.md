@@ -178,13 +178,14 @@ the old one            the app                  a later, separate deploy
 2. **Dual-write.** App writes both `name` and `full_name` on every insert/update. Deploy.
 3. **Backfill.** Copy `name → full_name` for existing rows, in batches, so you don't lock the table.
 4. **Switch reads.** Point the app at `full_name`, keep writing both. Deploy and bake.
-5. **Contract.** Stop writing `name`, then — in a *separate, later* deploy — drop the column.
+5. **Prepare contraction.** Inventory old-column constraints, defaults, triggers, and dependent clients. Relax a legacy `NOT NULL` constraint before new code stops populating that column, or keep a compatible write path until removal. Confirm old readers and rollback versions can tolerate the change.
+6. **Contract.** After compatible code is deployed and old consumers are retired, stop writing `name`; drop it in a separate later deploy. Preserve the needed data and rehearse recovery before the destructive step.
 
-Each step is independently deployable and reversible: if step 4 misbehaves, roll the code back and `full_name` is still being populated. Treat each phase as a thin vertical slice — see the `incremental-implementation` skill.
+The additive and dual-write phases support code rollback: if step 4 misbehaves, `full_name` is still being populated. Dropping a column destroys data; recreating its schema is not data recovery. Identify the point after which old code is incompatible and use a tested restore or forward-fix plan. Treat each phase as a thin vertical slice — see the `incremental-implementation` skill.
 
 **Rules:**
 - **Additive first, destructive last and alone.** Adds (new nullable column, new table, new index) are safe in any deploy; drops and renames get their own deploy *after* no code references the old shape.
-- **Every migration has a tested down path.** A migration you can't reverse is a deploy you can't roll back. Write and run the `down` before merging.
+- **Every migration has a tested recovery path.** Reversible changes need a tested down migration. Destructive changes need retained data and a rehearsed restore or forward fix, with their rollback limitations stated before deployment.
 - **Backfill in batches, off the hot path.** A single `UPDATE` over millions of rows locks the table; chunk it and throttle.
 - **Build large indexes without blocking writes** (e.g. Postgres `CREATE INDEX CONCURRENTLY`).
 - **Decouple from code by feature flag** when the cutover is risky, exactly as in the Feature Flag Migration pattern above.
@@ -213,7 +214,7 @@ Zombie code is code that nobody owns but everybody depends on. It's not actively
 | "We can maintain both systems indefinitely" | Two systems doing the same thing is double the maintenance, testing, documentation, and onboarding cost. |
 | "Just rename the column, it's one line" | During the rollout, old and new code run together — one will query a column that no longer exists. Expand/contract, never rename in place. |
 | "I'll add the column and drop the old one in the same migration" | That couples a safe add to a destructive drop. Drops get their own deploy, after no code references the old shape. |
-| "We'll write the rollback if we need it" | A migration with no down path is a deploy you can't reverse. Write and run the `down` before merging. |
+| "We'll write the rollback if we need it" | Recovery must be designed before deployment: test the down path for reversible changes and restore or forward-fix procedures for destructive changes. |
 
 ## Red Flags
 
@@ -226,7 +227,7 @@ Zombie code is code that nobody owns but everybody depends on. It's not actively
 - Removing code without verifying zero active consumers
 - A schema change and the code that depends on it shipped in the same deploy
 - A column renamed or dropped in place rather than via expand/contract
-- A migration merged with no tested down path, or a backfill that locks the table
+- A migration merged with no tested recovery path, or a backfill that locks the table
 
 ## Verification
 
@@ -243,5 +244,5 @@ After a database schema migration:
 
 - [ ] The change ships in additive phases (expand → backfill → contract), not a single in-place edit
 - [ ] Old and new code are both valid against the schema at every deploy step
-- [ ] Each migration has a tested down path; backfills run in throttled batches
+- [ ] Each migration has a tested recovery path with rollback limitations stated; backfills run in throttled batches
 - [ ] Destructive steps (drop/rename) ship in their own deploy after no code references the old shape

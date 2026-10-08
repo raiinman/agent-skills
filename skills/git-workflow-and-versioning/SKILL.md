@@ -167,7 +167,7 @@ git worktree remove ../project-feature-a
 Benefits:
 - Multiple agents can work on different features simultaneously
 - No branch switching needed (each directory has its own branch)
-- If one experiment fails, delete the worktree — nothing is lost
+- Before removing an experimental worktree, preserve any needed commits, uncommitted files, and ignored assets
 - Changes are isolated until explicitly merged
 
 ## The Save Point Pattern
@@ -177,16 +177,16 @@ Agent starts work
     │
     ├── Makes a change
     │   ├── Test passes? → Commit → Continue
-    │   └── Test fails? → Revert to last commit → Investigate
+    │   └── Test fails? → Undo the failed increment only → Investigate
     │
     ├── Makes another change
     │   ├── Test passes? → Commit → Continue
-    │   └── Test fails? → Revert to last commit → Investigate
+    │   └── Test fails? → Undo the failed increment only → Investigate
     │
     └── Feature complete → All commits form a clean history
 ```
 
-This pattern means you never lose more than one increment of work. If an agent goes off the rails, `git reset --hard HEAD` takes you back to the last successful state.
+Before the first increment, record the staged, unstaged, and untracked baseline. On failure, undo only changes owned by that increment; preserve earlier user work, including edits in the same file. Use a reverse patch or an isolated checkout when ownership overlaps. A repository-wide hard reset discards unrelated staged and unstaged work and is not a routine recovery step. If the failed increment was committed, use a revert that preserves subsequent work rather than rewriting shared history.
 
 ## Change Summaries
 
