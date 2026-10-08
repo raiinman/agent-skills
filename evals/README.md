@@ -28,14 +28,35 @@ Tier 2 is a **lexical approximation** of routing (stemmed TF-IDF over descriptio
 node scripts/run-evals.js
 node scripts/run-evals.js --min-rank1 95  # enforce the current routing floor
 
-# Tier 3 — behavioral, runs each eval through headless claude, then grades it
-node scripts/run-evals.js --behavioral test-driven-development            # spends tokens
+# Tier 3 — preview is free; live executor and grader calls spend tokens
 node scripts/run-evals.js --behavioral test-driven-development --dry-run  # prints the plan only
+
+# Set these environment variables to exact model IDs before a live comparison
+node scripts/run-evals.js --behavioral test-driven-development \
+  --executor-model "$EVAL_EXECUTOR_MODEL" --grader-model "$EVAL_GRADER_MODEL"
 ```
 
-Tier 3 supports two behavioral artifact kinds. `execution` is the default: each eval runs in a throwaway git repository, real project inputs from `files[]` are materialized out of `evals/fixtures/` and committed as the baseline, and the grader judges the full `--output-format stream-json --verbose` execution trace, including tool calls. `dialogue` is reserved for skills whose deliverable is the conversation itself; it needs no fixture, and the grader judges the assistant's conversational turns without requiring file edits or commands. Claiming `dialogue` is a human-reviewed exemption, not a general escape hatch for execution skills.
+Tier 3 uses the existing Claude Code backend and supports two behavioral artifact kinds. `execution` is the default: each eval runs in a throwaway git repository, archived project inputs from `files[]` are materialized and committed as the baseline, and the grader judges the full `--output-format stream-json --verbose` execution trace, including tool calls. `dialogue` is reserved for skills whose deliverable is the conversation itself; it may omit fixtures, or supply context files that are materialized in the same way. The grader judges conversational turns without requiring file edits or commands. Claiming `dialogue` is a human-reviewed exemption, not an escape hatch for execution skills.
 
-The executor runs with an explicit permission mode (`--permission-mode acceptEdits` plus a pre-approved tool list) so execution evals can genuinely edit files, run commands, inspect diffs, and make commits rather than being denied and narrating instead. Traces are fenced as untrusted data in the grader prompt and piped to the grader over stdin (they can be megabytes; argv would hit the OS argument-size limit), executor and grader calls carry timeouts, and grader output is validated as JSON before being written to `evals/results/` (gitignored) in skill-creator's `grading.json` shape. Discipline skills also include pressure cases for time pressure, sunk cost, and authority pressure; these verify that the workflow still holds when the prompt argues for skipping it.
+The executor loads a snapshot of the whole plugin using `--plugin-dir`: all skills, their supporting files, shared references, personas, command adapters, and runtime helpers remain together. The package stays outside the fixture's git history. A short instruction selects the target skill; its body is loaded by the host rather than injected without its assets. This measures explicitly selected skill behavior. Natural host routing and plugin-versus-baseline effects remain separate plugin evals below.
+
+The executor uses `acceptEdits` with an explicit available/pre-approved tool list, including `Skill` and `Agent`, so it can perform the workflow. The grader runs in a separate empty workspace with `--safe-mode`, no built-in tools, and MCP tools denied. Trace contents are marked as untrusted evidence and passed over stdin. Both calls carry timeouts and disable session persistence. These flags follow the [Claude Code CLI reference](https://code.claude.com/docs/en/cli-reference); use a CLI version supporting them. Authentication and host-managed policy still depend on the installed environment.
+
+Live runs require both `--executor-model` and `--grader-model`; the runner passes an explicit model selection to each call. Prefer exact IDs to aliases that may change. Requested IDs, observed executor/grader model identities, Claude and Node versions, platform, repository commit/dirty state, and input content hashes are recorded. When a response does not report an observed model, that field stays null or empty rather than being guessed from the requested ID.
+
+### Retained evidence
+
+Every live invocation creates a unique timestamped directory under `evals/results/`, including when an eval fails. It contains:
+
+- `run.json` and per-eval `*.run.json`: configuration, input fingerprints, completion status, and failure details.
+- `package/`, `fixtures/`, and `case.json`: the plugin and case inputs used in the run, including fixture setup patches.
+- `*.trace.jsonl`: complete returned executor trace; a failed subprocess's partial stdout/stderr is saved separately.
+- `*.grader-response.json`: raw grader envelope, including response/model metadata.
+- `*.grading.json`: validated expectation results in skill-creator's grading shape; malformed grading is retained as raw evidence and fails the run.
+
+Executor error or incomplete results are never graded as successful execution. Earlier run directories are not cleared or overwritten. Temporary executor/grader workspaces are removed after each eval; the retained evidence remains gitignored and local. Compare configuration and fingerprints before attributing score differences to a skill edit. Archived inputs improve auditability, but stochastic models and changes in provider or managed policy still prevent a promise of identical reruns.
+
+Discipline skills also include pressure cases for time pressure, sunk cost, and authority pressure. Local regression tests use fake CLI responses to verify package loading, model flags, evidence retention, and failure handling without invoking a provider. They do not establish live model behavior or Codex/Gemini runtime compatibility.
 
 ## Plugin evals (Claude Code)
 
@@ -87,7 +108,7 @@ One file per skill: `evals/cases/<skill-name>.json`.
 }
 ```
 
-- `evals[]` uses skill-creator's core schema (`id`, `prompt`, `expected_output`, optional `files[]`, `expectations[]`) plus this repository's optional `kind`. `kind` must be `execution` or `dialogue` and defaults to `execution` for compatibility. Execution evals require non-empty `files[]`; paths are relative to `evals/fixtures/` and may name a file or project directory. Dialogue evals may omit `files[]` because the transcript is the artifact. Expectations are verifiable statements a grader checks against the relevant artifact — behaviors, not phrasings.
+- `evals[]` uses skill-creator's core schema (`id`, `prompt`, `expected_output`, optional `files[]`, `expectations[]`) plus this repository's optional `kind`. IDs are unique positive integers within a case file. `kind` must be `execution` or `dialogue` and defaults to `execution` for compatibility. Execution evals require non-empty `files[]`; paths are relative to `evals/fixtures/` and may name a file or project directory. Dialogue evals may omit `files[]` because the transcript is the artifact. Expectations are verifiable statements a grader checks against the relevant artifact — behaviors, not phrasings.
 - `trigger` is this repo's extension. `positive` prompts are realistic user asks that should route here (`top_k` defaults to 3; tighten to 1 for a skill's signature ask). `negative` prompts belong to a *different* skill; this skill must not rank first for them. Declare that skill in `owner` where you can: the runner then asserts the owner **outranks** this skill, turning the negative into a real pairwise routing test instead of one that can pass vacuously when the prompt matches nothing.
 
 **Writing good trigger prompts:** paraphrase how users actually talk; don't copy the description (that's gaming the eval). If a realistic prompt can't rank because the description lacks its vocabulary, that is a real finding — improve the description.

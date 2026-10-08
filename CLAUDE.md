@@ -42,7 +42,7 @@ Before adding a new skill or significantly reworking an existing one, run the pr
 
 - `npm test` — Not applicable (this is a documentation project)
 - Validate: Check that all SKILL.md files have valid YAML frontmatter with name and description
-- Evals: `node scripts/run-evals.js` — trigger/routing evals for every skill (CI); `--behavioral <skill>` for graded runs
+- Evals: `node scripts/run-evals.js` — free trigger/routing checks (CI). Preview with `--behavioral <skill> --dry-run`; live graded runs require explicit executor/grader model IDs and a requested paid evaluation. See `evals/README.md`.
 
 ## Pull Requests
 

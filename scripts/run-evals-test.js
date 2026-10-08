@@ -299,6 +299,39 @@ test('rejects an invalid rank-1 floor', () => {
   assert.match(result.stderr, /--min-rank1 must be a number from 0 to 100/);
 });
 
+test('requires both explicit model selections before a live behavioral run', () => {
+  const root = makeSandbox();
+  for (const args of [[], ['--executor-model', 'pinned-executor'], ['--grader-model', 'pinned-grader']]) {
+    const result = run(root, ['--behavioral', 'alpha-skill', ...args]);
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /require --executor-model and --grader-model/);
+    assert.equal(fs.existsSync(path.join(root, 'evals', 'results')), false);
+  }
+});
+
+test('rejects missing model values and model options on deterministic runs', () => {
+  const root = makeSandbox();
+  const missing = run(root, ['--behavioral', 'alpha-skill', '--dry-run', '--executor-model', '--grader-model', 'pinned']);
+  assert.equal(missing.status, 1);
+  assert.match(missing.stderr, /--executor-model needs a model ID/);
+  const deterministic = run(root, ['--executor-model', 'pinned']);
+  assert.equal(deterministic.status, 1);
+  assert.match(deterministic.stderr, /only to --behavioral/);
+});
+
+test('rejects duplicate or non-positive IDs in deterministic case validation', () => {
+  for (const id of [0, -1, 1]) {
+    const root = makeSandbox();
+    writeSkill(root, 'alpha-skill', 'Handles alpha widgets. Use when changing alpha widgets.');
+    const data = completeCase('alpha-skill', 'change alpha widget');
+    data.evals.push({ ...data.evals[0], id });
+    writeJson(path.join(root, 'evals', 'cases', 'alpha-skill.json'), data);
+    const result = run(root);
+    assert.equal(result.status, 1);
+    assert.match(result.stdout, /does not match evals.json schema/);
+  }
+});
+
 // ---------- parseGrading expectation-binding tests ----------
 
 test('accepts reordered-but-complete grader results', () => {

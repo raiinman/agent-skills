@@ -49,4 +49,4 @@ Keep the plugin package together so links to the root `references/` directory re
 
 Local validators check skill structure, lexical routing, references, command parity, artifact paths, and manifest versions. These checks do not establish native model invocation reliability. Gemini and other inherited host integrations retain portable content; native runtime verification is a later stage.
 
-Before treating a new version as behaviorally proven, exercise representative tasks in Codex and record the host/model versions and observed outcomes. Paid behavioral evaluation runs are optional and explicitly requested. Eval-runner fidelity and result reproducibility are the next stage of this fork's work.
+Before treating a new version as behaviorally proven, exercise representative tasks in Codex and record host/model versions and observed outcomes. Paid behavioral runs are optional and explicitly requested. The [eval guide](../evals/README.md) describes the existing Claude-backed runner's complete package snapshots, explicit model selections, and retained evidence. That runner's results do not establish native Codex or Gemini behavior.
