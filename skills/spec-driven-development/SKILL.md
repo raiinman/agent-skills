@@ -15,7 +15,7 @@ Write a structured specification when substantial work or unresolved requirement
 - Requirements are ambiguous or incomplete
 - The change spans capabilities whose boundaries or dependencies need agreement
 - You're about to make an architectural decision
-- The task would take more than 30 minutes to implement
+- Significant interactions, risks, or acceptance criteria need a shared agreement
 
 **When NOT to use:** Single-line fixes, typo corrections, or changes where requirements are unambiguous and self-contained.
 

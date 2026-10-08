@@ -84,7 +84,7 @@ The README install section lists only hosts a maintainer has installed and run t
 
 ## Repo-scoped files
 
-`AGENTS.md` and `CLAUDE.md` at the repo root configure agents working on the [`addyosmani/agent-skills`](https://github.com/addyosmani/agent-skills) repository itself. When writing setup guides or docs, do not instruct users to copy these files into their own projects or into a global agent configuration; the reusable assets are the skills in `skills/`.
+`AGENTS.md` and `CLAUDE.md` at the repo root configure agents working on this [`raiinman/agent-skills`](https://github.com/raiinman/agent-skills) fork itself. When writing setup guides or docs, do not instruct users to copy these files into their own projects or into a global agent configuration; the reusable assets are the skills in `skills/`.
 
 ## Translations
 
@@ -129,7 +129,7 @@ Open an issue if you find:
 
 If a skill's guidance was wrong, outdated, or did not apply in your project
 (for example, it assumed `npm test` in a Maven or Gradle repo), use the
-[Skill gap](https://github.com/addyosmani/agent-skills/issues/new?template=skill-gap.yml)
+[Skill gap](https://github.com/raiinman/agent-skills/issues/new?template=skill-gap.yml)
 issue form. It asks for the affected skill, the relevant excerpt, your project
 context, and what you did instead — enough for maintainers to triage without a
 freeform write-up.

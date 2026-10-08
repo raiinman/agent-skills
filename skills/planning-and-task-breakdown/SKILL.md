@@ -134,9 +134,9 @@ Add explicit checkpoints to the task list target:
 | **S** | 1-2 | One component or endpoint | Add a new API endpoint |
 | **M** | 3-5 | One feature slice | User registration flow |
 | **L** | 5-8 | Multi-component feature | Search with filtering and pagination |
-| **XL** | 8+ | **Too large — break it down further** | — |
+| **XL** | 8+ | Review the outcome and dependency boundaries | Mechanical migrations may still be one atomic task |
 
-If a task is L or larger, it should be broken into smaller tasks. An agent performs best on S and M tasks.
+Use file counts as estimates, not mandatory gates. Split a task when uncertainty, independent outcomes, or dependency boundaries make it hard to verify as one increment. A clear mechanical change across many files can remain atomic; a risky one-file change may need smaller steps.
 
 **When to break a task down further:**
 - It would take more than one focused session (roughly 2+ hours of agent work)

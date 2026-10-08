@@ -194,8 +194,8 @@ Build fails:
 ├── Type error → Read the error, check the types at the cited location
 ├── Import error → Check the module exists, exports match, paths are correct
 ├── Config error → Check build config files for syntax/schema issues
-├── Dependency error → Check package.json, run npm install
-└── Environment error → Check Node version, OS compatibility
+├── Dependency error → Verify the detected manager/lockfile; use its approved frozen install and script policy
+└── Environment error → Check the repository's runtime version and OS compatibility
 ```
 
 ### Runtime Error Triage

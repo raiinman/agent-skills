@@ -19,8 +19,10 @@ This skill is primarily an interactive dialogue. Invoke it with an idea, and the
 
 ```bash
 # Optional: Initialize the ideas directory
-bash skills/idea-refine/scripts/idea-refine.sh
+bash /absolute/path/to/idea-refine/scripts/idea-refine.sh
 ```
+
+Resolve that path from this installed skill's directory. Run from the user's project directory so the helper creates `docs/ideas/` there, not inside the plugin package.
 
 **Trigger Phrases:**
 - "Help me refine this idea"
@@ -29,7 +31,7 @@ bash skills/idea-refine/scripts/idea-refine.sh
 
 ## Output
 
-The final output is a markdown one-pager saved to `docs/ideas/[idea-name].md` (after user confirmation), containing:
+The final output is a markdown one-pager, saved to `docs/ideas/[idea-name].md` when requested or otherwise authorized, containing:
 - Problem Statement
 - Recommended Direction
 - Key Assumptions
@@ -66,7 +68,7 @@ When the user invokes this skill with an idea (`$ARGUMENTS`), guide them through
    - What's been tried before?
    - Why now?
 
-   Use the `AskUserQuestion` tool to gather this input. Do NOT proceed until you understand who this is for and what success looks like.
+   Reuse answers and decisions already available. Use the host's question mechanism for consequential gaps; wait before work that depends on those answers. Proceed when the intended user and success criteria are settled.
 
 3. **Generate 5-8 idea variations** using these lenses:
    - **Inversion:** "What if we did the opposite?"
@@ -77,9 +79,9 @@ When the user invokes this skill with an idea (`$ARGUMENTS`), guide them through
    - **10x version:** "What would this look like at massive scale?"
    - **Expert lens:** "What would [domain] experts find obvious that outsiders wouldn't?"
 
-   Push beyond what the user initially asked for. Create products people don't know they need yet.
+   Explore alternatives to solve the user's stated problem. Label adjacent ideas as optional possibilities; they do not expand the authorized implementation scope.
 
-**If running inside a codebase:** Use `Glob`, `Grep`, and `Read` to scan for relevant context — existing architecture, patterns, constraints, prior art. Ground your variations in what actually exists. Reference specific files and patterns when relevant.
+**If running inside a codebase:** Search and read relevant architecture, patterns, constraints, and prior art with the host's available tools. Ground variations in what actually exists and cite the relevant files.
 
 Read `frameworks.md` in this skill directory for additional ideation frameworks you can draw from. Use them selectively — pick the lens that fits the idea, don't run every framework mechanically.
 
@@ -137,7 +139,7 @@ Produce a concrete artifact — a markdown one-pager that moves work forward:
 
 **The "Not Doing" list is arguably the most valuable part.** Focus is about saying no to good ideas. Make the trade-offs explicit.
 
-Ask the user if they'd like to save this to `docs/ideas/[idea-name].md` (or a location of their choosing). Only save if they confirm.
+Save to the requested location when artifact creation is already authorized. Otherwise offer `docs/ideas/[idea-name].md` or a location of their choosing. Preserve the user's requested deliverable: ideation alone does not authorize implementation.
 
 ### Anti-patterns to Avoid
 
@@ -175,4 +177,4 @@ After completing an ideation session:
 - [ ] Hidden assumptions are explicitly listed with validation strategies
 - [ ] A "Not Doing" list makes trade-offs explicit
 - [ ] The output is a concrete artifact (markdown one-pager), not just conversation
-- [ ] The user confirmed the final direction before any implementation work
+- [ ] The final direction and implementation scope were settled before any implementation work

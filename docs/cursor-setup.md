@@ -2,6 +2,8 @@
 
 How to wire [agent-skills](../README.md) into **Cursor** using current, supported project context — not legacy monolith files or Kaizen-specific layouts.
 
+The `.cursor/` paths below belong to the project consuming these skills. They are created during setup; this skill-pack source repository does not need a checked-in `.cursor/` directory. This inherited integration is not runtime-verified for the personal fork; the supported fork installation is [the Codex plugin](codex-setup.md).
+
 ---
 
 ## What Cursor supports today
@@ -39,6 +41,7 @@ your-project/
 ├── .cursor/
 │   ├── rules/                    # Short .mdc policies (yours)
 │   │   └── agent-skills.mdc      # Optional: “use project skills” pointer
+│   ├── references/               # Shared pack references, copied together
 │   └── skills/                   # What Cursor Agent loads
 │       ├── using-agent-skills/
 │       ├── test-driven-development/
@@ -60,21 +63,26 @@ Treat `agent-skills/skills/` (or a cloned [addyosmani/agent-skills](https://gith
 **From a local clone of agent-skills** (at project root or elsewhere):
 
 ```bash
-mkdir -p .cursor/skills
+mkdir -p .cursor/skills .cursor/references
 rsync -a /path/to/agent-skills/skills/ .cursor/skills/
+rsync -a /path/to/agent-skills/references/ .cursor/references/
 ```
 
 **First-time copy without overwriting your custom skills:**
 
 ```bash
 rsync -a --ignore-existing /path/to/agent-skills/skills/ .cursor/skills/
+rsync -a --ignore-existing /path/to/agent-skills/references/ .cursor/references/
 ```
 
 **After upstream updates:**
 
 ```bash
 rsync -a /path/to/agent-skills/skills/ .cursor/skills/
+rsync -a /path/to/agent-skills/references/ .cursor/references/
 ```
+
+Copy the shared references with the skills: from `.cursor/skills/<name>/SKILL.md`, `../../references/` resolves to `.cursor/references/`. Copying only one skill is insufficient for this pack's shared resources and cross-skill workflows. Resolve runnable helper paths from the installed skill directory, rather than assuming the consuming project has a root `skills/` directory.
 
 Each skill folder must contain `SKILL.md` with YAML frontmatter, at minimum:
 
