@@ -110,24 +110,24 @@ Yes / no / refine?
 
 Including "Out of scope" is non-negotiable. Half of misalignment is silent disagreement about what is *not* being built.
 
-### Step 5: Confirm — explicit yes, not "whatever you think"
+### Step 5: Confirm the Concrete Intent
 
-The gate is an explicit "yes." The following are **not** yes:
+Look for clear agreement with the concrete restate, including any delegated choices:
 
-- "Whatever you think is best." → The user is delegating, which means they don't have 95% confidence either. Re-ask with two concrete options framed as a choice.
-- "Sounds good." → Ambiguous. Ask: "Anything you'd refine?" Silence isn't confirmation.
-- "Sure, let's go." → Often a polite exit, not an endorsement. Same follow-up.
-- Silence followed by "okay let's start." → The user has given up on the interview, not converged. Stop and ask whether you've missed something.
+- "Whatever you think is best" delegates judgment. Use it for choices within settled scope; ask a concrete question if the outcome or a consequential constraint remains unresolved.
+- "Sounds good" in direct response to a concrete restate can confirm it. Clarify only when the response leaves a consequential qualification unresolved. Silence is not confirmation.
+- "Sure, let's go" or "okay let's start" in response to the restate can confirm it and authorize continuation. Do not infer disagreement or interview fatigue without evidence.
+- Silence alone provides no confirmation or authorization.
 
-If they correct you, fold the correction in and restate. Loop until you get an explicit yes.
+If they correct you, fold the correction in and restate. Continue until they clearly confirm the shared intent; confirmation does not require a particular word.
 
-### Step 6: Terminal Turn & Stop Rule (CRITICAL)
+### Step 6: Complete the Requested Deliverable
 
-When the user confirms the statement of intent with an explicit "yes":
+When the user clearly confirms the concrete statement of intent:
 
 1. **Deliver the confirmed Statement of Intent.**
-2. **Offer downstream paths** (offer to save it to `docs/intent/[topic].md`, draft a spec with `spec-driven-development`, or move to task planning after the spec).
-3. **STOP YOUR TURN IMMEDIATELY.** Do NOT invoke tools or start downstream work in this turn. Hand control back to the user to choose the next step.
+2. **Honor the authorized scope.** If the request was interview or intent only, offer relevant downstream paths and stop with the confirmed intent.
+3. **Continue already-authorized work.** If the user has authorized planning or implementation and the needed decisions are settled, carry the confirmed intent into the appropriate workflow in the same turn. Ask only about consequential gaps or actions outside that authorization.
 
 ### The 95% Confidence Stop
 
@@ -137,13 +137,13 @@ You're done when you can answer yes to this:
 
 If yes, you have shared understanding. Stop interviewing and produce the restate. If no, you're not done; ask the next question.
 
-This is a checkable test, not a vibe. It also has a floor: if you've gone several rounds and still can't predict, that's information about the ask, not a reason to keep grinding. Stop and tell the user: "I've asked X questions and I still can't predict your reactions. Something foundational is missing. Want to step back?"
+This is a confidence heuristic, not a measured probability. Check that the outcome, scope, success criteria, binding constraints, and authorization are settled; predicted agreement cannot replace those facts. If several rounds still leave foundational gaps, name the missing decision and pause dependent work rather than extending the interview indefinitely.
 
 ## Output
 
-The output of this skill is a **confirmed statement of intent**: the restate from Step 4, with an explicit yes from Step 5. That's the deliverable. Specs, plans, and task lists are downstream; they consume the intent this skill produces.
+The output of this skill is a **confirmed statement of intent**: the concrete restate from Step 4, clearly confirmed in Step 5. That's the deliverable. Specs, plans, and task lists are downstream; they consume the intent this skill produces within the user's authorized scope.
 
-If the user wants the intent to persist (a multi-session project, a handoff to another collaborator), offer to save it to `docs/intent/[topic].md`. Only save if they confirm.
+If the user requests a persistent intent artifact, save it to their chosen location or `docs/intent/[topic].md`. Otherwise offer to save when persistence would help. Reuse prior authorization to save rather than asking for the same approval again.
 
 ## Example
 
@@ -210,9 +210,9 @@ Two questions in, the agent has discovered the actual ask isn't "a dashboard." I
 
 - Three or more questions in a single message: that's batching, not interviewing
 - A question without your hypothesis attached: that's surveying, not committing
-- Accepting "whatever you think is best" as a terminal answer
+- Treating delegated judgment as a substitute for an unresolved outcome or binding constraint
 - Producing a spec, plan, or task list before the user has explicitly confirmed your restate
-- Invoking tools or starting downstream work immediately upon intent confirmation instead of stopping the turn
+- Starting downstream work outside the requested deliverable or implementation authorization
 - Questions framed as "what would be best practice?" instead of "what do you actually want?"
 - The user gives a sophistication-signaling answer ("scalable", "clean", "modern") and you accept it without probing whether it's what they actually want
 - Three or more rounds without your confidence visibly rising: you're asking the wrong questions, step back and reframe
@@ -229,7 +229,7 @@ After applying interview-me:
 - [ ] Questions were asked one at a time, each with the agent's guess attached
 - [ ] At least one "what would you actually want if you didn't have to justify it?" probe ran when the user gave a sophistication-signaling or convention-signaling answer
 - [ ] A concrete restate (Outcome / User / Why now / Success / Constraint / Out of scope) was written back to the user
-- [ ] The user confirmed the restate with an explicit yes (not "whatever you think," not "sounds good," not silence)
+- [ ] The user clearly confirmed the concrete restate; silence or unresolved ambiguity was not treated as confirmation
 - [ ] At the stop point, the agent could predict reactions to the next three questions it would ask
-- [ ] Upon receiving explicit confirmation, stopped the turn immediately without invoking tools or starting downstream work
+- [ ] Completed the requested interview deliverable, then continued only the downstream work already authorized or stopped when the request was intent only
 - [ ] Any handoff to a downstream skill (`idea-refine`, `spec-driven-development`) was framed in terms of the confirmed intent, not the original underspecified ask

@@ -8,6 +8,7 @@ set -euo pipefail
 
 PASS=0 FAIL=0
 TMPDIR=$(mktemp -d)
+TMPDIR=$(cd -P "$TMPDIR" && pwd)
 trap 'rm -rf "$TMPDIR"' EXIT
 
 export CACHE="$TMPDIR/cache"
@@ -20,7 +21,6 @@ hash_cmd() {
   else printf '%s\n' "error: missing shasum or sha1sum" >&2; exit 1; fi
 }
 file_id() { printf '%s' "$1" | hash_cmd | cut -c1-16; }
-block_hash() { printf '%s' "$1" | hash_cmd | cut -c1-8; }
 escape_glob() {
   local s="$1"
   s="${s//\\/\\\\}"
@@ -30,7 +30,11 @@ escape_glob() {
   printf '%s' "$s"
 }
 
-# Extract filter_file from the hook script (line 59 "filter_file()" to line 142 closing brace)
+# Extract the actual helpers rather than maintaining duplicate filtering code.
+eval "$(sed -n '/^no_symlink_components()/,/^}/p' hooks/simplify-ignore.sh)"
+eval "$(sed -n '/^cache_guard()/,/^}/p' hooks/simplify-ignore.sh)"
+eval "$(sed -n '/^block_hash()/,/^}/p' hooks/simplify-ignore.sh)"
+eval "$(sed -n '/^cache_block_content()/,/^}/p' hooks/simplify-ignore.sh)"
 eval "$(sed -n '/^filter_file()/,/^}/p' hooks/simplify-ignore.sh)"
 
 assert_eq() {
@@ -264,7 +268,10 @@ const protectedValue = 42;
 /* simplify-ignore-end */
 EOF
 
-  hook_event() { printf '%s' "$1" | CLAUDE_PROJECT_DIR="$PROJ" bash hooks/simplify-ignore.sh; }
+  hook_event() {
+    printf '%s' "$1" | jq '. + {session_id:"test-session",hook_event_name:(if .tool_name == "Read" then "PreToolUse" elif .tool_name then "PostToolUse" else "Stop" end)}' |
+      CLAUDE_PROJECT_DIR="$PROJ" SIMPLIFY_IGNORE_CACHE_DIR="$PROJ/.claude/.simplify-ignore-cache" bash hooks/simplify-ignore.sh
+  }
   read_event=$(printf '{"tool_name":"Read","tool_input":{"file_path":"%s"}}' "$TARGET")
   edit_event=$(printf '{"tool_name":"Edit","tool_input":{"file_path":"%s"}}' "$TARGET")
 
@@ -292,7 +299,7 @@ EOF
 fi
 
 # ── Test 12: Stop fallback keeps the rewrite in the cache ───────────────
-printf '\nTest 12: Wholesale rewrite is kept in the cache before the backup restore\n'
+printf '\nTest 12: Wholesale rewrite stays in place and protected backup is retained\n'
 
 if ! command -v jq >/dev/null 2>&1; then
   printf '  SKIP: full lifecycle needs jq (the hook exits at its jq guard)\n'
@@ -308,7 +315,10 @@ const protectedValue = 42;
 /* simplify-ignore-end */
 EOF
 
-  hook_event() { printf '%s' "$1" | CLAUDE_PROJECT_DIR="$PROJ" bash hooks/simplify-ignore.sh; }
+  hook_event() {
+    printf '%s' "$1" | jq '. + {session_id:"test-session",hook_event_name:(if .tool_name == "Read" then "PreToolUse" elif .tool_name then "PostToolUse" else "Stop" end)}' |
+      CLAUDE_PROJECT_DIR="$PROJ" SIMPLIFY_IGNORE_CACHE_DIR="$PROJ/.claude/.simplify-ignore-cache" bash hooks/simplify-ignore.sh
+  }
   read_event=$(printf '{"tool_name":"Read","tool_input":{"file_path":"%s"}}' "$TARGET")
 
   hook_event "$read_event"
@@ -320,11 +330,11 @@ EOF
   stop_out=$(hook_event '{}' 2>&1) || true
 
   PROJ_CACHE="$PROJ/.claude/.simplify-ignore-cache"
-  RECOVERED="$PROJ_CACHE/$(file_id "$TARGET").recovered"
+  RECOVERED=$(find "$PROJ_CACHE" -name '*.recovered.*' -type f | head -1)
 
-  assert_eq "backup restored over the rewrite" "1" "$(grep -c 'const protectedValue = 42;' "$TARGET")"
+  assert_eq "rewrite stays in place" "const rewritten = 7;" "$(cat "$TARGET")"
   assert_eq "rewrite kept in cache" "1" "$([ -f "$RECOVERED" ] && echo 1 || echo 0)"
-  assert_eq "cached rewrite has the rewritten content" "const rewritten = 7;" "$(cat "$RECOVERED")"
+  assert_eq "recovery holds protected original" "1" "$(grep -c 'const protectedValue = 42;' "$RECOVERED")"
   assert_eq "warning names the restored file" "1" \
     "$(printf '%s' "$stop_out" | grep -c -F "$TARGET")"
   assert_eq "warning names the cached rewrite" "1" \
@@ -348,7 +358,10 @@ const protectedValue = 42;
 /* simplify-ignore-end */
 EOF
 
-  hook_event() { printf '%s' "$1" | CLAUDE_PROJECT_DIR="$PROJ" bash hooks/simplify-ignore.sh; }
+  hook_event() {
+    printf '%s' "$1" | jq '. + {session_id:"test-session",hook_event_name:(if .tool_name == "Read" then "PreToolUse" elif .tool_name then "PostToolUse" else "Stop" end)}' |
+      CLAUDE_PROJECT_DIR="$PROJ" SIMPLIFY_IGNORE_CACHE_DIR="$PROJ/.claude/.simplify-ignore-cache" bash hooks/simplify-ignore.sh
+  }
   read_event=$(printf '{"tool_name":"Read","tool_input":{"file_path":"%s"}}' "$TARGET")
 
   # Read → placeholder on disk, backup taken
@@ -377,14 +390,20 @@ if command -v jq >/dev/null 2>&1; then
 
 rt_hook_event() {
   # rt_hook_event <project_dir> <tool_name|""> <file_path|"">
-  local proj="$1" tool="$2" fp="$3" input
+  local proj="$1" tool="$2" fp="$3" input sid="${4:-test-session}" event="${5:-}"
   if [ -n "$tool" ]; then
     input=$(jq -n --arg t "$tool" --arg fp "$fp" \
       '{tool_name:$t, tool_input:{file_path:$fp}}')
   else
     input='{}'
   fi
-  printf '%s' "$input" | CLAUDE_PROJECT_DIR="$proj" bash hooks/simplify-ignore.sh
+  if [ -z "$event" ]; then
+    if [ "$tool" = "Read" ]; then event=PreToolUse
+    elif [ -n "$tool" ]; then event=PostToolUse
+    else event=Stop; fi
+  fi
+  input=$(printf '%s' "$input" | jq --arg sid "$sid" --arg event "$event" '. + {session_id:$sid,hook_event_name:$event}')
+  printf '%s' "$input" | CLAUDE_PROJECT_DIR="$proj" SIMPLIFY_IGNORE_CACHE_DIR="$proj/.claude/.simplify-ignore-cache" bash hooks/simplify-ignore.sh
 }
 
 # ── Test 14: Read → Stop restores the file byte-identically ──────────────
@@ -466,8 +485,370 @@ else
   assert_eq "Stop restores original + edit byte-identically" "identical" "differs"
 fi
 
+# ── Test 17: Native event/session identity is mandatory ────────────────
+printf '\nTest 17: Missing identity and unrelated events do not mutate\n'
+PROJ="$TMPDIR/rt17"; mkdir -p "$PROJ"
+RT="$PROJ/identity.js"
+printf '// simplify-ignore-start\nhidden\n// simplify-ignore-end\n' > "$RT"
+cp "$RT" "$PROJ/original"
+for input in '{}' '{"hook_event_name":"Stop"}' '{"session_id":"A"}' \
+  '{"hook_event_name":"SessionStart","session_id":"A"}'; do
+  printf '%s' "$input" | CLAUDE_PROJECT_DIR="$PROJ" SIMPLIFY_IGNORE_CACHE_DIR="$PROJ/.claude/.simplify-ignore-cache" bash hooks/simplify-ignore.sh
+done
+assert_eq "identity-less events leave bytes unchanged" "0" "$(cmp -s "$RT" "$PROJ/original"; echo $?)"
+assert_eq "identity-less events create no cache" "0" "$([ -d "$PROJ/.claude/.simplify-ignore-cache" ] && echo 1 || echo 0)"
+
+# ── Test 18: Foreign Stop cannot invalidate an active owner's blocks ───
+printf '\nTest 18: A Read, B Stop, denied B tools, A Write and Stop\n'
+PROJ="$TMPDIR/rt18"; mkdir -p "$PROJ/nested"
+RT="$PROJ/shared.js"
+printf 'editable\n// simplify-ignore-start\nprotected\n// simplify-ignore-end\n' > "$RT"
+cp "$RT" "$PROJ/expected"
+rt_hook_event "$PROJ" Read "$RT" A
+rt_hook_event "$PROJ" '' '' B
+assert_eq "foreign Stop leaves placeholder intact" "1" "$(grep -c BLOCK_ "$RT")"
+for tool in Read Edit Write; do
+  rc=0
+  rt_hook_event "$PROJ" "$tool" "$PROJ/nested/../shared.js" B PreToolUse 2>"$PROJ/denied" || rc=$?
+  assert_eq "foreign $tool denied before tool execution" "2" "$rc"
+done
+if [ "$RT" -ef "$PROJ/SHARED.JS" ]; then
+  rc=0
+  rt_hook_event "$PROJ" Write "$PROJ/SHARED.JS" B PreToolUse 2>"$PROJ/denied" || rc=$?
+  assert_eq "foreign case-alias Write is denied" "2" "$rc"
 else
-  printf '\nTests 14-16 skipped: jq not available (hook no-ops without it)\n'
+  printf '  SKIP: case-alias assertion needs a case-insensitive filesystem\n'
+fi
+printf 'added\n' >> "$RT"
+printf 'added\n' >> "$PROJ/expected"
+rt_hook_event "$PROJ" Write "$RT" A
+rt_hook_event "$PROJ" '' '' A
+assert_eq "owner Write and Stop retain protected bytes and edit" "0" "$(cmp -s "$RT" "$PROJ/expected"; echo $?)"
+
+# ── Test 19: Rewrites do not overwrite recoveries or backups ───────────
+printf '\nTest 19: PostToolUse wholesale rewrite preserves original backup\n'
+PROJ="$TMPDIR/rt19"; mkdir -p "$PROJ"
+RT="$PROJ/rewrite.js"
+printf '// simplify-ignore-start\nprotected\n// simplify-ignore-end\n' > "$RT"
+cp "$RT" "$PROJ/original"
+rt_hook_event "$PROJ" Read "$RT" A
+PROJ_CACHE="$PROJ/.claude/.simplify-ignore-cache"
+BAK=$(find "$PROJ_CACHE" -name '*.bak' -type f | head -1)
+OLD_RECOVERY="${BAK%.bak}.recovered"
+printf 'existing recovery\n' > "$OLD_RECOVERY"
+printf 'rewritten with no terminal newline' > "$RT"
+rt_hook_event "$PROJ" Write "$RT" A 2>"$PROJ/warnings"
+assert_eq "PostToolUse does not refresh backup from rewrite" "0" "$(cmp -s "$BAK" "$PROJ/original"; echo $?)"
+rt_hook_event "$PROJ" '' '' A 2>>"$PROJ/warnings"
+assert_eq "rewrite stays in place without newline changes" "rewritten with no terminal newline" "$(cat "$RT")"
+assert_eq "rewrite still has no terminal newline" "0" "$(tail -c1 "$RT" | wc -l | tr -d ' ')"
+assert_eq "existing .recovered is never overwritten" "existing recovery" "$(cat "$OLD_RECOVERY")"
+RECOVERED=$(find "$PROJ_CACHE" -name '*.recovered.*' -type f | head -1)
+assert_eq "unique recovery retains protected original bytes" "0" "$(cmp -s "$RECOVERED" "$PROJ/original"; echo $?)"
+
+# ── Test 20: CRLF, blank lines, terminal blocks, modes, input aliases ───
+printf '\nTest 20: Byte fidelity and canonical input aliases\n'
+PROJ="$TMPDIR/rt20"; mkdir -p "$PROJ/nested"
+for variant in crlf terminal blanklines; do
+  RT="$PROJ/$variant.js"
+  case "$variant" in
+    crlf) printf 'top\r\n/* simplify-ignore-start */\r\nhidden\r\n/* simplify-ignore-end */\r\nbottom\r\n' > "$RT" ;;
+    terminal) printf 'top\n// simplify-ignore-start\nhidden\n// simplify-ignore-end' > "$RT" ;;
+    blanklines) printf '\n\n// simplify-ignore-start\nhidden\n\n// simplify-ignore-end\n\n\n' > "$RT" ;;
+  esac
+  chmod 750 "$RT"
+  original_mode=$(stat -c '%a' "$RT")
+  cp "$RT" "$PROJ/$variant.original"
+  rt_hook_event "$PROJ" Read "$PROJ/nested/../$variant.js" A
+  rt_hook_event "$PROJ" Read "$variant.js" A
+  rt_hook_event "$PROJ" '' '' A
+  assert_eq "$variant restored byte-identically" "0" "$(cmp -s "$RT" "$PROJ/$variant.original"; echo $?)"
+  assert_eq "$variant preserves mode" "$original_mode" "$(stat -c '%a' "$RT")"
+done
+
+# ── Test 21: Corrupt metadata never deletes the only recovery ──────────
+printf '\nTest 21: Metadata path aliases and missing paths retain backups\n'
+PROJ="$TMPDIR/rt21"; mkdir -p "$PROJ"
+RT="$PROJ/metadata.js"
+printf '// simplify-ignore-start\nprotected\n// simplify-ignore-end\n' > "$RT"
+rt_hook_event "$PROJ" Read "$RT" A
+PROJ_CACHE="$PROJ/.claude/.simplify-ignore-cache"
+BAK=$(find "$PROJ_CACHE" -name '*.bak' -type f | head -1)
+PATHFILE="${BAK%.bak}.path"
+printf '%s' "$PROJ/./metadata.js" > "$PATHFILE"
+rt_hook_event "$PROJ" '' '' A 2>"$PROJ/warnings"
+assert_eq "metadata alias does not authorize restoration" "1" "$(grep -c BLOCK_ "$RT")"
+assert_eq "metadata alias retains backup" "1" "$([ -f "$BAK" ] && echo 1 || echo 0)"
+rm -f "$PATHFILE"
+rt_hook_event "$PROJ" '' '' A 2>>"$PROJ/warnings"
+assert_eq "missing metadata retains backup" "1" "$([ -f "$BAK" ] && echo 1 || echo 0)"
+
+# ── Test 22: Foreign and unowned locks are never reclaimed ─────────────
+printf '\nTest 22: Foreign and unowned lock refusal\n'
+PROJ="$TMPDIR/rt22"; mkdir -p "$PROJ"
+RT="$PROJ/locked.js"
+printf '// simplify-ignore-start\nprotected\n// simplify-ignore-end\n' > "$RT"
+PROJ_CACHE="$PROJ/.claude/.simplify-ignore-cache"; mkdir -p "$PROJ_CACHE"
+FID=$(file_id "$RT")
+mkdir "$PROJ_CACHE/$FID.lock"
+printf 'B' > "$PROJ_CACHE/$FID.lock/owner"
+touch -t 202001010000 "$PROJ_CACHE/$FID.lock"
+rc=0; rt_hook_event "$PROJ" Read "$RT" A 2>"$PROJ/warnings" || rc=$?
+assert_eq "stale foreign lock denies Read" "2" "$rc"
+assert_eq "foreign lock owner survives" "B" "$(cat "$PROJ_CACHE/$FID.lock/owner")"
+rt_hook_event "$PROJ" '' '' A
+assert_eq "foreign lock survives Stop" "1" "$([ -d "$PROJ_CACHE/$FID.lock" ] && echo 1 || echo 0)"
+rm -f "$PROJ_CACHE/$FID.lock/owner"
+rc=0; rt_hook_event "$PROJ" Read "$RT" A 2>"$PROJ/warnings" || rc=$?
+assert_eq "unowned lock denies Read rather than deleting it" "2" "$rc"
+
+# ── Test 23: Outside paths, real symlinks, and cache symlink writes ─────
+printf '\nTest 23: Unsafe target/cache paths are refused\n'
+PROJ="$TMPDIR/rt23"; mkdir -p "$PROJ"
+OUTSIDE="$TMPDIR/outside.js"
+printf '// simplify-ignore-start\noutside protected\n// simplify-ignore-end\n' > "$OUTSIDE"
+cp "$OUTSIDE" "$TMPDIR/outside.original"
+rt_hook_event "$PROJ" Read "$OUTSIDE" A
+assert_eq "outside-root target left byte-identical" "0" "$(cmp -s "$OUTSIDE" "$TMPDIR/outside.original"; echo $?)"
+RT="$PROJ/link.js"
+if MSYS=winsymlinks:nativestrict ln -s "$OUTSIDE" "$RT" 2>/dev/null && [ -L "$RT" ]; then
+  rt_hook_event "$PROJ" Read "$RT" A
+  assert_eq "symlink target left byte-identical" "0" "$(cmp -s "$OUTSIDE" "$TMPDIR/outside.original"; echo $?)"
+  rm -f "$RT"
+  printf '// simplify-ignore-start\ninside protected\n// simplify-ignore-end\n' > "$RT"
+  MSYS=winsymlinks:nativestrict ln -s "$RT" "$PROJ/inside-link.js"
+  rt_hook_event "$PROJ" Read "$PROJ/inside-link.js" A
+  assert_eq "in-root symlink is refused before canonicalization" "1" "$(grep -c 'inside protected' "$RT")"
+  rm -f "$PROJ/inside-link.js"
+  mkdir "$PROJ/real-cache"
+  MSYS=winsymlinks:nativestrict ln -s "$PROJ/real-cache" "$PROJ/cache-link"
+  for unsafe_cache in "$PROJ/cache-link" "$PROJ/cache-link/nested"; do
+    rc=0
+    jq -n --arg fp "$RT" '{hook_event_name:"PreToolUse",session_id:"A",tool_name:"Read",tool_input:{file_path:$fp}}' |
+      CLAUDE_PROJECT_DIR="$PROJ" SIMPLIFY_IGNORE_CACHE_DIR="$unsafe_cache" bash hooks/simplify-ignore.sh 2>"$PROJ/warnings" || rc=$?
+    assert_eq "symlinked cache or parent refuses writes" "2" "$rc"
+  done
+  rm -f "$PROJ/cache-link"
+  rt_hook_event "$PROJ" Read "$RT" A
+  PROJ_CACHE="$PROJ/.claude/.simplify-ignore-cache"
+  BAK=$(find "$PROJ_CACHE" -name '*.bak' -type f | head -1)
+  for suffix in path owner bak lock/owner; do
+    metadata="${BAK%.bak}.$suffix"
+    mv "$metadata" "$PROJ/held-metadata"
+    MSYS=winsymlinks:nativestrict ln -s "$OUTSIDE" "$metadata"
+    rc=0; rt_hook_event "$PROJ" Write "$RT" A PreToolUse 2>"$PROJ/warnings" || rc=$?
+    assert_eq "cache $suffix symlink refused" "2" "$rc"
+    assert_eq "cache $suffix does not write through symlink" "0" "$(cmp -s "$OUTSIDE" "$TMPDIR/outside.original"; echo $?)"
+    rm -f "$metadata"
+    mv "$PROJ/held-metadata" "$metadata"
+  done
+  rt_hook_event "$PROJ" '' '' A
+else
+  rm -f "$RT"
+  printf '  SKIP: native symlinks unavailable on this filesystem\n'
+fi
+
+# ── Test 24: Partial placeholder loss retains the deleted block ────────
+printf '\nTest 24: Partial rewrite retains recoverable protected content\n'
+PROJ="$TMPDIR/rt24"; mkdir -p "$PROJ"
+RT="$PROJ/partial.js"
+printf 'editable\n// simplify-ignore-start\nfirst secret\n// simplify-ignore-end\n// simplify-ignore-start\nsecond secret\n// simplify-ignore-end\n' > "$RT"
+cp "$RT" "$PROJ/original"
+rt_hook_event "$PROJ" Read "$RT" A
+# Remove only the first placeholder, retaining the second insertion point.
+awk '/BLOCK_/ && !removed { removed=1; next } { print }' "$RT" > "$PROJ/rewritten"
+cat "$PROJ/rewritten" > "$RT"
+rt_hook_event "$PROJ" Edit "$RT" A 2>"$PROJ/warnings"
+rt_hook_event "$PROJ" '' '' A 2>>"$PROJ/warnings"
+PROJ_CACHE="$PROJ/.claude/.simplify-ignore-cache"
+RECOVERED=$(find "$PROJ_CACHE" -name '*.recovered.*' -type f | head -1)
+assert_eq "partially removed block survives in original recovery" "0" "$(cmp -s "$RECOVERED" "$PROJ/original"; echo $?)"
+assert_eq "remaining block is expanded into current file" "1" "$(grep -c 'second secret' "$RT")"
+
+# ── Test 25: Replacement failure preserves the original recovery data ──
+printf '\nTest 25: Failed atomic replacement retains backup and metadata\n'
+PROJ="$TMPDIR/rt25"; mkdir -p "$PROJ/failing-bin"
+RT="$PROJ/failure.js"
+printf '// simplify-ignore-start\nprotected\n// simplify-ignore-end\n' > "$RT"
+cp "$RT" "$PROJ/original"
+printf '#!/bin/bash\nexit 1\n' > "$PROJ/failing-bin/mv"
+chmod +x "$PROJ/failing-bin/mv"
+rc=0
+PATH="$PROJ/failing-bin:$PATH" rt_hook_event "$PROJ" Read "$RT" A 2>"$PROJ/warnings" || rc=$?
+assert_eq "replacement failure is reported" "1" "$rc"
+PROJ_CACHE="$PROJ/.claude/.simplify-ignore-cache"
+BAK=$(find "$PROJ_CACHE" -name '*.bak' -type f | head -1)
+assert_eq "replacement failure preserves original target" "0" "$(cmp -s "$RT" "$PROJ/original"; echo $?)"
+assert_eq "replacement failure preserves backup bytes" "0" "$(cmp -s "$BAK" "$PROJ/original"; echo $?)"
+assert_eq "replacement failure retains recovery path" "1" "$([ -f "${BAK%.bak}.path" ] && echo 1 || echo 0)"
+
+# ── Test 26: Exact SHA1/32-bit collision pair round-trips separately ────
+printf '\nTest 26: Previously colliding protected blocks round-trip exactly\n'
+PROJ="$TMPDIR/rt26"; mkdir -p "$PROJ"
+RT="$PROJ/collision.js"
+FIRST_BLOCK=$(printf '// simplify-ignore-start\nconst protected_2322 = 2322;\n// simplify-ignore-end')
+SECOND_BLOCK=$(printf '// simplify-ignore-start\nconst protected_130093 = 130093;\n// simplify-ignore-end')
+assert_eq "first block has reproduced old collision ID" "f71cdd6f" "$(printf '%s' "$FIRST_BLOCK" | hash_cmd | cut -c1-8)"
+assert_eq "second block has reproduced old collision ID" "f71cdd6f" "$(printf '%s' "$SECOND_BLOCK" | hash_cmd | cut -c1-8)"
+printf '%s\n%s' "$FIRST_BLOCK" "$SECOND_BLOCK" > "$RT"
+cp "$RT" "$PROJ/original"
+rt_hook_event "$PROJ" Read "$RT" A
+PROJ_CACHE="$PROJ/.claude/.simplify-ignore-cache"
+assert_eq "distinct cached blocks survive the old collision pair" "2" "$(find "$PROJ_CACHE" -name '*.block.*' -type f | wc -l | tr -d ' ')"
+assert_eq "placeholders use 128-bit content identifiers" "2" "$(grep -Ec 'BLOCK_[a-f0-9]{32}' "$RT")"
+rt_hook_event "$PROJ" Edit "$RT" A
+rt_hook_event "$PROJ" '' '' A
+assert_eq "old collision pair restores byte-identically" "0" "$(cmp -s "$RT" "$PROJ/original"; echo $?)"
+
+# Exercise the collision guard deterministically without replacing real jq or
+# weakening the full-lifecycle content-hash regression above.
+collision_rc=0
+(
+  CACHE="$PROJ/forced-cache"; mkdir -p "$CACHE"
+  block_hash() { printf '%s' '00000000000000000000000000000000'; }
+  filter_file "$PROJ/original" "$PROJ/forced-filtered" forced
+) 2>"$PROJ/collision-warning" || collision_rc=$?
+assert_eq "differing content with the same identifier is refused" "2" "$collision_rc"
+assert_eq "collision refusal retains the first cached block" "$FIRST_BLOCK" "$(cat "$PROJ/forced-cache/forced.block.00000000000000000000000000000000")"
+assert_eq "collision refusal diagnoses the conflict" "1" "$(grep -c 'identifier collision' "$PROJ/collision-warning")"
+
+# ── Test 27: Identical blocks need occurrence-aware recovery ───────────
+printf '\nTest 27: Removing one identical placeholder retains both original occurrences\n'
+PROJ="$TMPDIR/rt27"; mkdir -p "$PROJ"
+RT="$PROJ/duplicates.js"
+BLOCK=$(printf '// simplify-ignore-start\nprotected();\n// simplify-ignore-end')
+printf 'function a() {\n%s\n}\nfunction b() {\n%s\n}\n' "$BLOCK" "$BLOCK" > "$RT"
+cp "$RT" "$PROJ/original"
+rt_hook_event "$PROJ" Read "$RT" A
+awk '/BLOCK_/ && !removed { removed=1; next } { print }' "$RT" > "$PROJ/rewritten"
+cat "$PROJ/rewritten" > "$RT"
+rt_hook_event "$PROJ" Edit "$RT" A 2>"$PROJ/warnings"
+rt_hook_event "$PROJ" '' '' A 2>>"$PROJ/warnings"
+PROJ_CACHE="$PROJ/.claude/.simplify-ignore-cache"
+RECOVERED=$(find "$PROJ_CACHE" -name '*.recovered.*' -type f | head -1)
+if [ -n "$RECOVERED" ] && cmp -s "$RECOVERED" "$PROJ/original"; then
+  assert_eq "identical-block deletion retains original placement and multiplicity" "0" "0"
+else
+  assert_eq "identical-block deletion retains original placement and multiplicity" "0" "1"
+fi
+assert_eq "surviving duplicate is expanded" "1" "$(grep -c 'protected();' "$RT")"
+
+# ── Test 28: Unsupported NUL text must never be filtered ───────────────
+printf '\nTest 28: NUL-containing source is refused without mutation\n'
+for variant in outside inside; do
+  PROJ="$TMPDIR/rt28-$variant"; mkdir -p "$PROJ"
+  RT="$PROJ/binary.js"
+  if [ "$variant" = outside ]; then
+    printf 'prefix\0suffix\n// simplify-ignore-start\nprotected();\n// simplify-ignore-end\n' > "$RT"
+  else
+    printf '// simplify-ignore-start\nprefix\0suffix\n// simplify-ignore-end\n' > "$RT"
+  fi
+  cp "$RT" "$PROJ/original"
+  rt_hook_event "$PROJ" Read "$RT" A
+  rt_hook_event "$PROJ" '' '' A
+  assert_eq "NUL $variant protected block remains byte-identical" "0" "$(cmp -s "$RT" "$PROJ/original"; echo $?)"
+  assert_eq "NUL $variant creates no protection state" "0" "$([ -d "$PROJ/.claude/.simplify-ignore-cache" ] && echo 1 || echo 0)"
+done
+
+# ── Test 29: Trusted default temporary roots can have normal aliases ───
+printf '\nTest 29: Default temporary-root alias resolves physically\n'
+PROJ="$TMPDIR/rt29"; mkdir -p "$PROJ/physical-temp"
+RT="$PROJ/default.js"
+printf '// simplify-ignore-start\nprotected();\n// simplify-ignore-end\n' > "$RT"
+cp "$RT" "$PROJ/original"
+if ln -s "$PROJ/physical-temp" "$PROJ/temporary-alias" 2>/dev/null && [ -L "$PROJ/temporary-alias" ]; then
+  jq -n --arg fp "$RT" '{hook_event_name:"PreToolUse",session_id:"A",tool_name:"Read",tool_input:{file_path:$fp}}' |
+    CLAUDE_PROJECT_DIR="$PROJ" TMPDIR="$PROJ/temporary-alias" SIMPLIFY_IGNORE_CACHE_DIR='' bash hooks/simplify-ignore.sh
+  assert_eq "aliased default temporary root permits protection" "1" "$(grep -c BLOCK_ "$RT")"
+  printf '%s' '{"hook_event_name":"Stop","session_id":"A"}' |
+    CLAUDE_PROJECT_DIR="$PROJ" TMPDIR="$PROJ/temporary-alias" SIMPLIFY_IGNORE_CACHE_DIR='' bash hooks/simplify-ignore.sh
+  assert_eq "aliased default cache restores original bytes" "0" "$(cmp -s "$RT" "$PROJ/original"; echo $?)"
+else
+  printf '  SKIP: temporary-root alias test needs symlink support\n'
+fi
+
+# ── Test 30: NUL eligibility never bypasses foreign ownership ──────────
+printf '\nTest 30: NUL-containing active protection still denies foreign tools\n'
+PROJ="$TMPDIR/rt30"; mkdir -p "$PROJ"
+RT="$PROJ/protected.js"
+printf '// simplify-ignore-start\nprotected();\n// simplify-ignore-end\n' > "$RT"
+cp "$RT" "$PROJ/original"
+rt_hook_event "$PROJ" Read "$RT" A
+PROJ_CACHE="$PROJ/.claude/.simplify-ignore-cache"
+BAK=$(find "$PROJ_CACHE" -name '*.bak' -type f | head -1)
+printf '\0unsupported text' >> "$RT"
+cp "$RT" "$PROJ/current-with-nul"
+for tool in Read Edit Write; do
+  rc=0; rt_hook_event "$PROJ" "$tool" "$RT" B PreToolUse 2>"$PROJ/warnings" || rc=$?
+  assert_eq "foreign $tool is denied despite NUL content" "2" "$rc"
+done
+rt_hook_event "$PROJ" Write "$RT" A 2>"$PROJ/warnings"
+rt_hook_event "$PROJ" '' '' A 2>>"$PROJ/warnings"
+assert_eq "owner Post/Stop leave unsupported current bytes untouched" "0" "$(cmp -s "$RT" "$PROJ/current-with-nul"; echo $?)"
+assert_eq "owner Stop retains the expanded backup" "0" "$(cmp -s "$BAK" "$PROJ/original"; echo $?)"
+LOCK=$(printf '%s' "$BAK" | sed 's/\.bak$/.lock\/owner/')
+assert_eq "unsupported active file keeps its ownership lock" "A" "$(cat "$LOCK")"
+
+# ── Test 31: Restored content is never another substitution input ──────
+printf '\nTest 31: Literal cross-block tokens survive expansion\n'
+PROJ="$TMPDIR/rt31"; mkdir -p "$PROJ"
+CACHE="$PROJ/cache"; mkdir -p "$CACHE"
+eval "$(sed -n '/^expand_file()/,/^}/p' hooks/simplify-ignore.sh)"
+B=$(printf '// simplify-ignore-start\nsecretB();\n// simplify-ignore-end')
+HB=$(block_hash "$B")
+A=$(printf '// simplify-ignore-start\nconst token = "BLOCK_%s"; // nonce=0\n// simplify-ignore-end' "$HB")
+HA=$(block_hash "$A")
+assert_eq "the restored A token is tested before cached B" "1" "$([ "$HA" \< "$HB" ] && echo 1 || echo 0)"
+printf '%s\n%s\n' "$A" "$B" > "$PROJ/original"
+filter_file "$PROJ/original" "$PROJ/filtered" cascade
+expand_file "$PROJ/filtered" "$PROJ/expanded" cascade
+assert_eq "cross-block literal token roundtrip preserves original bytes" "0" "$(cmp -s "$PROJ/original" "$PROJ/expanded"; echo $?)"
+tr '\n' ' ' < "$PROJ/filtered" > "$PROJ/same-line"
+printf '\n' >> "$PROJ/same-line"
+printf '%s %s \n' "$A" "$B" > "$PROJ/same-line-expected"
+expand_file "$PROJ/same-line" "$PROJ/same-line-expanded" cascade
+assert_eq "multiple original placeholders on one line cannot cascade into restored text" "0" "$(cmp -s "$PROJ/same-line-expected" "$PROJ/same-line-expanded"; echo $?)"
+
+# ── Test 32: Refused token collisions cannot be expanded by Stop ───────
+printf '\nTest 32: Reserved-token refusal is safe through later Stop\n'
+for variant in read refilter active; do
+  PROJ="$TMPDIR/rt32-$variant"; mkdir -p "$PROJ"
+  RT="$PROJ/collision.js"
+  B=$(printf '// simplify-ignore-start\nprotectedB();\n// simplify-ignore-end')
+  HB=$(block_hash "$B")
+  if [ "$variant" = read ]; then
+    printf 'const literal = "BLOCK_%s";\n%s\n' "$HB" "$B" > "$RT"
+    cp "$RT" "$PROJ/expected"
+    rc=0; rt_hook_event "$PROJ" Read "$RT" A 2>"$PROJ/warnings" || rc=$?
+  else
+    A=$(printf '// simplify-ignore-start\nprotectedA();\n// simplify-ignore-end')
+    printf '%s\n' "$A" > "$RT"
+    rt_hook_event "$PROJ" Read "$RT" A
+    if [ "$variant" = refilter ]; then
+      printf 'const literal = "BLOCK_%s";\n%s\n' "$HB" "$B" >> "$RT"
+      printf '%s\nconst literal = "BLOCK_%s";\n%s\n' "$A" "$HB" "$B" > "$PROJ/expected"
+    else
+      HA=$(block_hash "$A")
+      printf 'const literal = "BLOCK_%s";\n' "$HA" >> "$RT"
+      cp "$RT" "$PROJ/expected"
+    fi
+    rc=0; rt_hook_event "$PROJ" Edit "$RT" A 2>"$PROJ/warnings" || rc=$?
+  fi
+  assert_eq "$variant collision is refused" "2" "$rc"
+  assert_eq "$variant refusal leaves current bytes intact" "0" "$(cmp -s "$RT" "$PROJ/expected"; echo $?)"
+  rt_hook_event "$PROJ" '' '' A 2>>"$PROJ/warnings"
+  assert_eq "$variant refusal then Stop preserves current bytes" "0" "$(cmp -s "$RT" "$PROJ/expected"; echo $?)"
+  PROJ_CACHE="$PROJ/.claude/.simplify-ignore-cache"
+  if [ "$variant" = active ]; then
+    assert_eq "active ambiguity retains its expanded backup" "1" "$(find "$PROJ_CACHE" -name '*.bak' -type f | wc -l | tr -d ' ')"
+  else
+    RECOVERED=$(find "$PROJ_CACHE" -name '*.recovered.*' -type f | head -1)
+    assert_eq "$variant refusal retains byte-identical recovery" "0" "$(cmp -s "$RECOVERED" "$PROJ/expected"; echo $?)"
+  fi
+done
+
+else
+  printf '\nTests 14-32 skipped: jq not available (hook exits at its jq guard)\n'
 fi
 
 # ── Summary ──────────────────────────────────────────────────────────────

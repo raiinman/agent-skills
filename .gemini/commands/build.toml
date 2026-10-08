@@ -3,6 +3,8 @@ description = "Implement tasks incrementally — build, test, verify, commit. Ad
 prompt = """
 Invoke the incremental-implementation skill. Apply test-driven-development when changing executable behavior; use relevant content or configuration checks for static edits.
 
+For UI rendering or interaction tasks, invoke frontend-ui-engineering; use browser-testing-with-devtools when the required browser capability is available. For changes crossing authentication, authorization, or untrusted-input boundaries, invoke security-and-hardening. Load these workflows when their branch applies, rather than relying on a passive reference or loading the whole catalog.
+
 ## Modes
 
 - `/build` — implement the next pending task, then stop because this command requests one task.
