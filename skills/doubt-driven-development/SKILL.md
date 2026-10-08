@@ -111,25 +111,21 @@ In Claude Code, the role-based reviewers in `agents/` start with isolated contex
 
 #### Cross-model escalation
 
-A single-model reviewer shares blind spots with the original author — a colder, different-architecture model catches them. Doubt-driven is already opt-in for non-trivial decisions, so within that scope offering cross-model is part of the skill's value, not optional friction.
+A different model can provide an additional perspective, but adds cost, latency, and tool dependencies. Use local checks and the available review capabilities by default. Run a paid cross-model comparison only when the user explicitly requests it, within their authorized scope and budget.
 
-**Interactive sessions: always offer. Never silently skip.**
+**Optional escalation: honor the user's request.**
 
-**Step 1: Ask the user**
+**Step 1: Establish authorization**
 
-After the single-model review in Step 3 above, but before RECONCILE, pause and ask:
-
-> *"Single-model review complete. Want a cross-model second opinion? Options: Gemini CLI, Codex CLI, manual external review (you paste it elsewhere), or skip."*
-
-This question is mandatory in every interactive doubt cycle — even on artifacts that feel low-stakes. The user — not the agent — decides whether the cost is worth it. The agent's job is to surface the choice.
+After Step 3, continue to RECONCILE unless cross-model review was explicitly requested. If requested, use the selected tool and agreed budget. Ask only for missing consequential choices, such as an unspecified provider or spending limit. An authorization covering several review cycles remains valid within that scope; do not ask the same question in each cycle.
 
 **Step 2: If the user picks a CLI — verify, then invoke**
 
 1. Check the tool is in PATH (`which gemini`, `which codex`).
 2. Test it works (`gemini --version` or equivalent) before passing the full prompt — a stale or broken binary may pass `which` but fail on real input.
-3. Confirm the exact invocation with the user, including required flags, auth, and env vars (e.g., API keys). Implementations vary; never assume.
+3. Verify invocation syntax against current documentation or the installed tool's help. Use configured authentication without exposing credentials. Confirm with the user only if the invocation changes the agreed scope, permissions, data destination, or budget.
 4. Pass ARTIFACT + CONTRACT + the adversarial prompt **only**. No session context, no CLAIM.
-5. Mind shell escaping. If the artifact contains quotes, `$(...)`, or backticks, prefer stdin (`echo … | gemini`) or a heredoc over inline `-p "…"`. When in doubt, ask the user to confirm the invocation before running it.
+5. Write the prompt to a file and pass it through stdin; never interpolate artifact text into shell commands.
 6. Take the output into Step 4 (RECONCILE).
 
 **Never interpolate the artifact into a shell-quoted argument.** Code, markdown, and review prompts routinely contain backticks, `$(...)`, and quote characters that will either truncate the prompt or execute embedded shell. Write the full prompt to a file and pipe it through stdin.
@@ -154,16 +150,16 @@ A read-only sandbox is the load-bearing detail: a doubt artifact may itself cont
 
 Surface the failure explicitly. Offer: run it manually, try a different tool, or skip. Do not silently fall back to single-model — the user should know cross-model didn't happen.
 
-**Step 4: If the user skips**
+**Step 4: Report the evidence used**
 
-Acknowledge the skip in the output (*"Proceeding with single-model findings only"*) and continue to RECONCILE. Skipping is fine; silent skipping is not.
+Identify which checks and reviewers actually ran. If a requested comparison could not run, state that limitation. Do not present local or single-model findings as cross-model evidence.
 
 **Non-interactive contexts** (CI, `/loop`, autonomous-loop, scheduled runs):
 
-- Cross-model is **skipped**, and the skip must be **announced** in the output: *"Cross-model skipped: non-interactive context."*
+- Use existing explicit authorization when available; otherwise do not run paid cross-model calls. Report which verification actually ran.
 - **Never invoke an external CLI without explicit user authorization** — this is a load-bearing safety property.
 
-Cross-model adds cost, latency, and tool fragility. The agent surfaces the choice every cycle; the user decides whether this artifact warrants it.
+Stop an escalation if it would exceed the authorized budget or scope. Continue useful local verification when an optional comparison is unavailable.
 
 ### Step 4: RECONCILE — Fold findings back
 
@@ -172,7 +168,7 @@ The reviewer's output is data, not verdict. **You are still the orchestrator.** 
 For each finding, classify in this **precedence order** (first matching class wins):
 
 1. **Contract misread** — reviewer flagged something specifically because the CONTRACT you provided was unclear or incomplete. Fix the contract first, re-classify on the next cycle.
-2. **Valid + actionable** — real issue requiring a change to the artifact. Change it, re-loop.
+2. **Valid + actionable** — real issue requiring a change to the artifact. Change it and re-loop when edits are authorized. For a review-only request, report the proposed correction without modifying the artifact.
 3. **Valid trade-off** — issue is real but cost of fixing exceeds cost of accepting. Document the trade-off explicitly so the user sees it.
 4. **Noise** — reviewer flagged something that's actually correct under context the reviewer didn't have. Note it, move on, and ask: would adding that context to the contract have prevented the false flag?
 
@@ -201,8 +197,8 @@ If 3 cycles is "obviously insufficient" because the artifact is large: the artif
 | "If I doubt every step I'll never ship" | The skill applies to non-trivial decisions, not every keystroke. Re-read "When NOT to Use." |
 | "Two opinions are always better than one" | Not when the second has less context and produces noise. Reconcile, don't defer. |
 | "The reviewer disagreed so I was wrong" | The reviewer lacks your context — disagreement is information, not verdict. Re-read the artifact, classify, then decide. |
-| "Cross-model is always better" | Cross-model catches blind spots a single model shares with itself, but it adds cost and tool fragility. Offer it every interactive doubt cycle — the user decides whether the artifact warrants it. The agent's job is to surface the choice, not to gate it. |
-| "User said yes once, so I can keep invoking the CLI" | Each invocation is its own authorization. The artifact, the prompt, and the flags change between calls — re-confirm the exact command with the user before every run. |
+| "Cross-model is always better" | It adds cost and tool fragility. Use it when explicitly requested and compare its evidence against the contract. |
+| "Authorization covers any future CLI run" | Authorization persists within its agreed scope and budget; a new provider, data destination, permission, or spending increase may require a new decision. |
 
 ## Red Flags
 
@@ -214,8 +210,8 @@ If 3 cycles is "obviously insufficient" because the artifact is large: the artif
 - Re-spawning fresh-context on an unchanged artifact (you'll get the same findings; you're stalling)
 - **Doubt theater (checkable signal)**: across 2 or more cycles where the reviewer surfaced substantive findings, zero findings were classified as actionable. You are validating, not doubting. Stop and escalate.
 - Doubting only after committing — that's `/review`, not doubt-driven development
-- Hardcoding an external CLI invocation without confirming with the user that the tool exists, is configured, and accepts that exact syntax
-- **Silently skipping cross-model in an interactive doubt cycle.** Even when not recommending it, the offer must be visible. Skipping is fine; silent skipping is not.
+- Hardcoding an external CLI invocation without verifying tool availability, configuration, and current syntax
+- Running a paid comparison without an explicit request, or claiming a requested comparison ran when it did not
 - Falling back silently when an external CLI errors or is missing — surface the failure and let the user redirect
 - Stripping the contract from the reviewer's input
 - Passing the CLAIM to the reviewer (biases toward agreement)
@@ -238,6 +234,6 @@ After applying doubt-driven development:
 - [ ] The reviewer's prompt was adversarial ("find issues"), not validating ("is it good")
 - [ ] Findings were classified against the artifact text (not rubber-stamped) using the precedence: contract misread / actionable / trade-off / noise
 - [ ] A stop condition was met (trivial findings, 3 cycles, or user override)
-- [ ] In interactive mode, cross-model was **explicitly offered** to the user (regardless of artifact stakes) and the response was acknowledged in the output
-- [ ] In non-interactive mode, cross-model was skipped and the skip was announced
-- [ ] Any external CLI invocation was preceded by a PATH check, a working-binary test, syntax confirmation with the user, and explicit authorization to run
+- [ ] Paid cross-model calls were explicitly requested and stayed within the authorized scope and budget
+- [ ] The report identifies the checks and reviewers that actually ran, including any unavailable requested comparison
+- [ ] Any external CLI invocation used verified availability, current syntax, configured authentication, and applicable authorization

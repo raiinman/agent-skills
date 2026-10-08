@@ -1,6 +1,6 @@
 # Getting Started with agent-skills
 
-agent-skills works with any AI coding agent that accepts Markdown instructions. This guide covers the universal approach. For tool-specific setup, see the dedicated guides.
+The shared skills work with agents that accept Markdown instructions. This personal fork supports the [native Codex plugin](codex-setup.md); the generic loading approaches below are for hosts without native skill installation. Prefer on-demand skill discovery over copying whole workflows into always-loaded rules.
 
 Want a worked example before setting up your own project? The
 [interactive tutorials](https://skills.addy.ie/tutorials/) walk through a
@@ -18,7 +18,7 @@ Each skill is a Markdown file (`SKILL.md`) that describes a specific engineering
 ### 1. Clone the repository
 
 ```bash
-git clone https://github.com/addyosmani/agent-skills.git
+git clone https://github.com/raiinman/agent-skills.git
 ```
 
 ### 2. Choose a skill
@@ -64,7 +64,7 @@ Rolling out to a real project? The **[Adoption Guide](adoption-guide.md)** cover
 
 ### Minimal (Start here)
 
-Load three essential skills into your rules file:
+Install or selectively load these skills when their workflows apply; on Codex, use the plugin rather than pasting their bodies into rules:
 
 1. **spec-driven-development** — For defining what to build
 2. **test-driven-development** — For proving it works
@@ -131,7 +131,7 @@ The `.claude/commands/` directory contains slash commands for Claude Code:
 | `/constraints` | constraint-driven-development |
 | `/plan` | planning-and-task-breakdown |
 | `/build` | incremental-implementation + test-driven-development |
-| `/build auto` | planning-and-task-breakdown → incremental-implementation + test-driven-development (whole plan, one approval) |
+| `/build auto` | planning-and-task-breakdown → incremental-implementation + applicable verification (whole authorized plan) |
 | `/test` | test-driven-development |
 | `/review` | code-review-and-quality |
 | `/code-simplify` | code-simplification |
@@ -178,7 +178,7 @@ The `/spec` and `/plan` commands create working artifacts (`SPEC.md`, `tasks/pla
 
 ### Working across sessions
 
-The same artifacts are the handoff between sessions. For a small task, run the whole lifecycle in one session. For anything non-trivial, a fresh session per phase (spec → plan → build → review) keeps context focused — what carries the work forward is the approved files, not the conversation:
+For a small, clear task, execute directly and run relevant checks. Substantial or ambiguous work uses specs and plans; continue through the authorized phases in one session while context remains useful. A fresh session is optional at a completed task boundary. Before switching, persist accepted decisions and authorization in the handoff files:
 
 - the spec — `SPEC.md`, or wherever your spec actually lives
 - `tasks/plan.md` and `tasks/todo.md` — or the external tracker the plan identifies, if you use one
@@ -201,8 +201,8 @@ This doesn't need the `/spec` and `/plan` wrappers — plain requests work in an
 
 ## Tips
 
-1. **Start with spec-driven-development** for any non-trivial work
-2. **Always load test-driven-development** when writing code
+1. **Use spec-driven-development** for substantial or ambiguous work; reuse settled requirements
+2. **Apply test-driven-development** to new or fixed behavior; use relevant validation for static edits
 3. **Don't skip verification steps** — they're the whole point
 4. **Load skills selectively** — more context isn't always better
 5. **Use the agents for review** — different perspectives catch different issues

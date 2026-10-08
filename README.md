@@ -1,6 +1,8 @@
-# Agent Skills
+# Raiinman Agent Skills
 
-**Production-grade engineering skills for AI coding agents.**
+**A personal Codex-first fork of [Addy Osmani's Agent Skills](https://github.com/addyosmani/agent-skills).**
+
+The 25-skill catalog and original attribution are preserved. This fork carries prior authorization through the workflow, executes small clear tasks directly, scales checks to changed behavior, and keeps automatic commits for verified tasks. Paid model comparisons require an explicit request.
 
 Skills encode the workflows, quality gates, and best practices that senior engineers use when building software. These ones are packaged so AI agents follow them consistently across every phase of development.
 
@@ -35,7 +37,7 @@ Skills encode the workflows, quality gates, and best practices that senior engin
 | Simplify the code | `/code-simplify` | Clarity over cleverness |
 | Ship to production | `/ship` | Faster is safer |
 
-Want fewer manual steps once the spec exists? **`/build auto`** generates the plan and implements every task in a single approved pass — you approve the plan once, then it runs autonomously. It removes the human stepping *between* tasks, not the verification: every task is still test-driven and committed individually, and it pauses on failures or risky steps.
+**`/build auto`** executes the authorized plan and continues between verified tasks. Existing authorization carries across phases; consequential unresolved decisions or actions outside that scope still require an answer. Behavior changes use TDD, static edits use relevant validation, and verified tasks commit individually. Codex invokes the shared skills directly; the slash commands below are inherited host adapters.
 
 Skills also activate automatically based on what you're doing — designing an API triggers `api-and-interface-design`, building UI triggers `frontend-ui-engineering`, and so on.
 
@@ -43,19 +45,32 @@ Skills also activate automatically based on what you're doing — designing an A
 
 ## Quick Start
 
+The supported path for this personal fork is the native Codex plugin:
+
+```bash
+codex plugin marketplace add raiinman/agent-skills
+codex plugin add raiinman-agent-skills@raiinman-agent-skills
+```
+
+Start a new session and invoke a skill, or describe your task. Install through the plugin directory when using the desktop app; see [the Codex guide](docs/codex-setup.md). The distinct identity separates this fork from upstream, but installing both gives the host duplicate skill descriptions: enable one pack per project.
+
+### Other integrations
+
+The guides and command adapters below are inherited for portability. Native runtime verification for Gemini and the other hosts is deferred; local content and adapter parity checks run in this fork.
+
 **Fastest path — any agent, one command.** The open [skills CLI](https://github.com/vercel-labs/skills) installs into 70+ agents (Claude Code, Cursor, Codex, Copilot, Cline, and more):
 
 ```bash
-npx skills add addyosmani/agent-skills            # install all 25 skills
-npx skills add addyosmani/agent-skills --list     # browse before installing
+npx skills add raiinman/agent-skills            # install all 25 skills
+npx skills add raiinman/agent-skills --list     # browse before installing
 ```
 
 Or grab individual skills:
 
 ```bash
-npx skills add addyosmani/agent-skills --skill code-review-and-quality   # five-axis review before merge
-npx skills add addyosmani/agent-skills --skill interview-me              # requirements interrogation, one question at a time
-npx skills add addyosmani/agent-skills --skill test-driven-development   # red-green-refactor, enforced
+npx skills add raiinman/agent-skills --skill code-review-and-quality   # five-axis review before merge
+npx skills add raiinman/agent-skills --skill interview-me              # requirements interrogation, one question at a time
+npx skills add raiinman/agent-skills --skill test-driven-development   # red-green-refactor, enforced
 ```
 
 > **Installing one skill?** A per-skill `npx` install copies only
@@ -68,19 +83,19 @@ npx skills add addyosmani/agent-skills --skill test-driven-development   # red-g
 Prefer a native integration? Pick your tool below.
 
 <details>
-<summary><b>Claude Code (recommended)</b></summary>
+<summary><b>Claude Code (inherited integration)</b></summary>
 
 **Marketplace install:**
 
 ```
-/plugin marketplace add addyosmani/agent-skills
-/plugin install agent-skills@addy-agent-skills
+/plugin marketplace add raiinman/agent-skills
+/plugin install raiinman-agent-skills@raiinman-agent-skills
 ```
 
 > **SSH errors?** The marketplace clones repos via SSH. If you don't have SSH keys set up on GitHub, either [add your SSH key](https://docs.github.com/en/authentication/connecting-to-github-with-ssh/adding-a-new-ssh-key-to-your-github-account) or use the full HTTPS URL to force HTTPS cloning during the marketplace-add step:
 > ```bash
-> /plugin marketplace add https://github.com/addyosmani/agent-skills.git
-> /plugin install agent-skills@addy-agent-skills
+> /plugin marketplace add https://github.com/raiinman/agent-skills.git
+> /plugin install raiinman-agent-skills@raiinman-agent-skills
 > ```
 >
 > If `/plugin install` still fails with `git@github.com: Permission denied (publickey)` on Windows or macOS, the recommended workaround is to configure Git once to rewrite GitHub SSH URLs to HTTPS for subprocess clones:
@@ -91,7 +106,7 @@ Prefer a native integration? Pick your tool below.
 **Local / development:**
 
 ```bash
-git clone https://github.com/addyosmani/agent-skills.git
+git clone https://github.com/raiinman/agent-skills.git
 claude --plugin-dir /path/to/agent-skills
 ```
 
@@ -112,13 +127,13 @@ Install as a native plugin for skills and subagents. In affected Antigravity CLI
 **Install from the repo:**
 
 ```bash
-agy plugin install https://github.com/addyosmani/agent-skills.git
+agy plugin install https://github.com/raiinman/agent-skills.git
 ```
 
 **Install from a local clone:**
 
 ```bash
-git clone https://github.com/addyosmani/agent-skills.git
+git clone https://github.com/raiinman/agent-skills.git
 agy plugin install ./agent-skills
 ```
 
@@ -132,7 +147,7 @@ Install as native skills for auto-discovery, or add to `GEMINI.md` for persisten
 **Install from the repo:**
 
 ```bash
-gemini skills install https://github.com/addyosmani/agent-skills.git --path skills
+gemini skills install https://github.com/raiinman/agent-skills.git --path skills
 ```
 
 **Install from a local clone:**
@@ -176,11 +191,11 @@ Using the standalone `copilot` CLI? Install it as a plugin — see [docs/copilot
 <details>
 <summary><b>Codex</b></summary>
 
-Install as a native Codex plugin (Codex CLI v0.122+):
+Install as a native Codex plugin using a CLI with plugin-installation support:
 
 ```bash
-codex plugin marketplace add addyosmani/agent-skills
-codex plugin add agent-skills@agent-skills
+codex plugin marketplace add raiinman/agent-skills
+codex plugin add raiinman-agent-skills@raiinman-agent-skills
 ```
 
 The first command registers the marketplace; the second installs the plugin. Codex reads the root `skills/` directory directly through `.codex-plugin/plugin.json`. Once installed, invoke skills in chat using `@` (e.g., `@spec-driven-development`). See [docs/codex-setup.md](docs/codex-setup.md) for local installation and troubleshooting.
@@ -193,9 +208,9 @@ The first command registers the marketplace; the second installs the plugin. Cod
 Install natively with the built-in `cmd skills` command. Command Code clones the repo, discovers every `SKILL.md`, and installs into `.commandcode/skills/`:
 
 ```bash
-cmd skills add addyosmani/agent-skills            # pick skills to install (project)
-cmd skills add addyosmani/agent-skills --global   # install for all projects (~/.commandcode/skills/)
-cmd skills add addyosmani/agent-skills -s spec-driven-development  # install a specific skill
+cmd skills add raiinman/agent-skills            # pick skills to install (project)
+cmd skills add raiinman/agent-skills --global   # install for all projects (~/.commandcode/skills/)
+cmd skills add raiinman/agent-skills -s spec-driven-development  # install a specific skill
 ```
 
 Installed skills show up in the TUI slash menu, e.g. `/spec-driven-development`. See [docs/commandcode-setup.md](docs/commandcode-setup.md).

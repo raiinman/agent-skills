@@ -1,13 +1,13 @@
 {
-  "name": "agent-skills",
+  "name": "raiinman-agent-skills",
   "interface": {
-    "displayName": "Agent Skills"
+    "displayName": "Raiinman Agent Skills"
   },
   "plugins": [
     {
-      "name": "agent-skills",
-      "version": "0.6.12",
-      "description": "Production-grade engineering skills covering every phase of software development: spec, plan, build, verify, review, and ship.",
+      "name": "raiinman-agent-skills",
+      "version": "0.6.13",
+      "description": "Personal Codex-first fork of Addy Osmani's engineering workflows, with persistent authorization and task-proportional verification.",
       "source": {
         "source": "local",
         "path": "./"

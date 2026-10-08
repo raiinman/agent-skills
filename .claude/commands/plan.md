@@ -2,7 +2,7 @@
 description: Break work into small verifiable tasks with acceptance criteria and dependency ordering
 ---
 
-Invoke the agent-skills:planning-and-task-breakdown skill.
+Invoke the raiinman-agent-skills:planning-and-task-breakdown skill.
 
 Read the existing spec (SPEC.md or equivalent) and the relevant codebase sections. Then:
 
@@ -11,8 +11,8 @@ Read the existing spec (SPEC.md or equivalent) and the relevant codebase section
 3. Slice work vertically (one complete path per task, not horizontal layers)
 4. Write tasks with acceptance criteria and verification steps
 5. Add checkpoints between phases
-6. Present the plan for human review
+6. Present the plan. Stop for a plan-only request or reserved review; continue if implementation is already authorized and no consequential decision remains.
 
-Save the plan to tasks/plan.md and task list to tasks/todo.md.
+Save the plan to tasks/plan.md and the task list to the project's designated target (default tasks/todo.md).
 
 If tasks/plan.md or tasks/todo.md already exists with unchecked tasks for different work, stop and ask before writing — never silently overwrite an incomplete plan.

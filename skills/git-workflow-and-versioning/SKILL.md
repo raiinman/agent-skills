@@ -210,7 +210,7 @@ This pattern catches wrong assumptions early and gives reviewers a clear map of 
 
 ## Pre-Commit Hygiene
 
-Before every commit:
+Before every commit, inspect the staged diff and run the applicable repository checks. Discover the actual stack; the npm/TypeScript commands below are examples for projects that use them. Static edits need relevant content or configuration validation, not unrelated executable tests. Honor repository-required checks and reuse successful results when no subsequent change can affect them.
 
 ```bash
 # 1. Check what you're about to commit
@@ -343,7 +343,7 @@ For every commit:
 
 - [ ] Commit does one logical thing
 - [ ] Message explains the why, follows type conventions
-- [ ] Tests pass before committing
+- [ ] Applicable verification and repository-required checks pass before committing
 - [ ] No secrets in the diff
 - [ ] No formatting-only changes mixed with behavior changes
 - [ ] `.gitignore` covers standard exclusions

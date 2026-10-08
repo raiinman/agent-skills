@@ -13,12 +13,14 @@ Agent Skills is a collection of engineering workflow skills organized by develop
 
 When a task arrives, identify the development phase and apply the corresponding skill:
 
+First consider scope and uncertainty. Execute a small, clear, self-contained change directly and run its relevant checks. Use specs and written plans for substantial or ambiguous work, not simply because several files change. Explicit requests for a spec, plan, test-first workflow, or review still select that workflow.
+
 ```
 Task arrives
     │
     ├── Don't know what you want yet? ──────→ interview-me
     ├── Have a rough concept, need variants? → idea-refine
-    ├── New project/feature/change? ──→ spec-driven-development
+    ├── Substantial or ambiguous work? → spec-driven-development
     ├── No quality bar written down? ──→ constraint-driven-development
     ├── Have a spec, need tasks? ──────→ planning-and-task-breakdown
     ├── Implementing code? ────────────→ incremental-implementation
@@ -44,7 +46,13 @@ Task arrives
 
 ## Core Operating Behaviors
 
-These behaviors apply at all times, across all skills. They are non-negotiable.
+These behaviors apply across skills. Explicit user instructions and host permissions take precedence.
+
+### Authorization and Continuation
+
+Carry forward accepted scope, preferences, and authorization through the current session. When implementation is authorized, continue through the necessary phases without repeating settled approval questions. Ask when a consequential decision remains unresolved, scope changes, or an action needs authorization the user has not given. A request for a spec or plan alone does not authorize implementation; deliver it and stop. Record decisions and authorization in the existing handoff artifacts before changing sessions; do not invent approval on restart.
+
+Use local checks by default. Invoke paid model comparisons only when explicitly requested, within the authorized budget and scope.
 
 ### 1. Surface Assumptions
 
@@ -64,7 +72,7 @@ Don't silently fill in ambiguous requirements. The most common failure mode is m
 
 When you encounter inconsistencies, conflicting requirements, or unclear specifications:
 
-1. **STOP.** Do not proceed with a guess.
+1. Stop work that depends on a consequential unresolved decision. Continue useful independent investigation.
 2. Name the specific confusion.
 3. Present the tradeoff or ask the clarifying question.
 4. Wait for resolution before continuing.
@@ -102,7 +110,7 @@ Do NOT:
 - Remove comments you don't understand
 - "Clean up" code orthogonal to the task
 - Refactor adjacent systems as a side effect
-- Delete code that seems unused without explicit approval
+- Delete code whose usage is uncertain or whose removal exceeds the authorized task
 - Add features not in the spec because they "seem useful"
 
 Your job is surgical precision, not unsolicited renovation.
@@ -111,7 +119,7 @@ Your job is surgical precision, not unsolicited renovation.
 
 Every skill includes a verification step. A task is not complete until verification passes. "Seems right" is never sufficient — there must be evidence (passing tests, build output, runtime data).
 
-Per-skill verification is the local check. The project-wide bar that applies to *every* change, regardless of which skill is active, is the Definition of Done: tests pass, no regressions, behavior verified at runtime, docs updated. See `../../references/definition-of-done.md`. It complements each task's acceptance criteria rather than replacing them.
+Per-skill verification is the local check. Apply the project-wide Definition of Done using checks relevant to what changed: behavior tests for behavior changes, runtime checks for affected runtime paths, and content or configuration validation for static edits. Honor required repository checks and report any unverified behavior. See `../../references/definition-of-done.md`.
 
 ## Failure Modes to Avoid
 
@@ -125,7 +133,7 @@ These are the subtle errors that look like productivity but create problems:
 6. Overcomplicating code and APIs
 7. Modifying code or comments orthogonal to the task
 8. Removing things you don't fully understand
-9. Building without a spec because "it's obvious"
+9. Building substantial or ambiguous work without settling its requirements
 10. Skipping verification because "it looks right"
 
 ## Skill Rules
@@ -136,7 +144,7 @@ These are the subtle errors that look like productivity but create problems:
 
 3. **Multiple skills can apply.** A feature implementation might involve `idea-refine` → `spec-driven-development` → `planning-and-task-breakdown` → `incremental-implementation` → `test-driven-development` → `code-review-and-quality` → `code-simplification` → `shipping-and-launch` in sequence.
 
-4. **When in doubt, start with a spec.** If the task is non-trivial and there's no spec, begin with `spec-driven-development`.
+4. **Resolve meaningful uncertainty before building.** Inspect existing requirements first. Use `spec-driven-development` when the work needs a shared specification; avoid spec or plan artifacts for small tasks with settled requirements.
 
 ## Lifecycle Sequence
 

@@ -4,7 +4,9 @@
   stays out of the agent's working set.
 -->
 
-# How agent-skills compares
+# How upstream agent-skills compares
+
+This inherited comparison describes the upstream framework, not this personal fork's defaults. Raiinman Agent Skills prioritizes Codex, carries prior authorization across phases, scales workflow and verification to the task, and retains per-task commits. See [the Codex guide](codex-setup.md) for this fork's supported installation and policies.
 
 People often ask how **agent-skills** relates to the two other "skills for coding agents" collections they hear about most: **Superpowers** (Jesse Vincent / obra) and **Matt Pocock's skills**. All three are good, share a lot of DNA, and are worth learning from. This page is an honest map of how they are *shaped* differently, so you can pick the one that fits how you work, or borrow across all three.
 

@@ -19,6 +19,8 @@ Decompose work into small, verifiable tasks with explicit acceptance criteria. G
 
 **When NOT to use:** Single-file changes with obvious scope, or when the spec already contains well-defined tasks.
 
+File count alone does not require a written plan. A small, clear change can proceed directly even when related files need updating. Reuse existing accepted tasks and authorization.
+
 ## The Planning Process
 
 ### Step 1: Enter Plan Mode
@@ -31,6 +33,8 @@ Before writing any code, operate in read-only mode:
 - Note risks and unknowns
 
 **Do NOT write code during planning.** The output is a plan document saved to `tasks/plan.md` and a task list recorded in the task list target (see Output Files; default `tasks/todo.md`), not implementation.
+
+After planning, honor the requested deliverable. If only a plan was requested, present it and stop. If implementation is authorized and no consequential decision remains, record the plan and continue without a repeated approval gate. Wait for answers only on dependent work.
 
 ### Step 2: Identify the Dependency Graph
 
@@ -119,7 +123,7 @@ Add explicit checkpoints to the task list target:
 - [ ] All tests pass
 - [ ] Application builds without errors
 - [ ] Core user flow works end-to-end
-- [ ] Review with human before proceeding
+- [ ] Resolve consequential open decisions or reserved review; otherwise continue within authorization
 ```
 
 ## Task Sizing Guidelines
@@ -224,7 +228,7 @@ When multiple agents or sessions are available:
 |---|---|
 | "I'll figure it out as I go" | That's how you end up with a tangled mess and rework. 10 minutes of planning saves hours. |
 | "The tasks are obvious" | Write them down anyway. Explicit tasks surface hidden dependencies and forgotten edge cases. |
-| "Planning is overhead" | Planning is the task. Implementation without a plan is just typing. |
+| "Planning is overhead" | Substantial or uncertain work needs explicit dependencies and verification. Small, clear tasks can execute directly. |
 | "I can hold it all in my head" | Context windows are finite. Written plans survive session boundaries and compaction. |
 | "The old `tasks/plan.md` is stale, I'll just replace it" | Unchecked tasks may be mid-build in another session. Overwriting them destroys work state that exists nowhere else. Stop and ask. |
 
@@ -250,7 +254,7 @@ Before starting implementation, confirm:
 - [ ] No pre-existing incomplete plan was overwritten without explicit user confirmation
 - [ ] No task touches more than ~5 files
 - [ ] Checkpoints exist between major phases
-- [ ] The human has reviewed and approved the plan
+- [ ] The plan fits accepted scope and authorization; any consequential unresolved decision is awaiting an answer before dependent implementation
 
 ## See Also
 

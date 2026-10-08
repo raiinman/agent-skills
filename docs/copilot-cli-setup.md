@@ -4,23 +4,23 @@ The standalone `copilot` command-line tool installs this repository as a plugin 
 
 ## Install
 
-**From this repository's marketplace** — register it, then install from it. `addy-agent-skills` is the marketplace name this repository declares, not a GitHub-wide registry, and the name only resolves after the `marketplace add`:
+**From this repository's marketplace** — register it, then install from it. `raiinman-agent-skills` is the marketplace name this repository declares, not a GitHub-wide registry, and the name only resolves after the `marketplace add`:
 
 ```bash
-copilot plugin marketplace add addyosmani/agent-skills
-copilot plugin install agent-skills@addy-agent-skills
+copilot plugin marketplace add raiinman/agent-skills
+copilot plugin install raiinman-agent-skills@raiinman-agent-skills
 ```
 
 **Directly from the repository**, without registering a marketplace:
 
 ```bash
-copilot plugin install addyosmani/agent-skills
+copilot plugin install raiinman/agent-skills
 ```
 
 **From a local clone**, for a session-scoped development install:
 
 ```bash
-git clone https://github.com/addyosmani/agent-skills.git
+git clone https://github.com/raiinman/agent-skills.git
 copilot --plugin-dir /path/to/agent-skills
 ```
 
@@ -29,7 +29,7 @@ copilot --plugin-dir /path/to/agent-skills
 ## Verify
 
 ```bash
-copilot plugin list   # agent-skills@addy-agent-skills
+copilot plugin list   # raiinman-agent-skills@raiinman-agent-skills
 copilot skill list    # the plugin's skills, alongside the built-in ones
 ```
 
@@ -37,7 +37,7 @@ In an interactive session, `/skills list` shows the same catalog.
 
 ## What you get, and what you don't
 
-The root `plugin.json` is the manifest Copilot CLI reads — it takes precedence over `.claude-plugin/plugin.json`, which belongs to Claude Code. That root manifest declares only a name, version and description, so component paths fall back to their defaults:
+The root `plugin.json` is the manifest Copilot CLI reads — it takes precedence over `.claude-plugin/plugin.json`, which belongs to Claude Code. That root manifest declares the fork identity, version, and attribution metadata without explicit component paths, so those paths fall back to their defaults:
 
 - **Skills — available.** With no explicit path, the CLI uses the conventional `skills/` directory, and the skills are discovered there.
 - **Lifecycle commands — not available.** The root manifest has no `commands` field, so nothing registers `/spec`, `/plan`, `/build`, `/test`, `/review` or `/ship`. Those files live in `.claude/commands/` and are Claude Code commands.
@@ -58,7 +58,7 @@ Name the skill you want, or describe the task and let the agent route to it:
 
 | Symptom | What to check |
 |---------|---------------|
-| `plugin install` can't resolve `agent-skills@addy-agent-skills` | Run `copilot plugin marketplace add addyosmani/agent-skills` first — that name only resolves once the marketplace is registered. Or install the repository directly. |
+| `plugin install` can't resolve `raiinman-agent-skills@raiinman-agent-skills` | Run `copilot plugin marketplace add raiinman/agent-skills` first — that name only resolves once the marketplace is registered. Or install the repository directly. |
 | Plugin installed but no skills | `copilot plugin list` to confirm the plugin, then `copilot skill list` (or `/skills list` in session) to see what was discovered. |
 | `/spec`, `/build` and friends are not found | Expected, not a broken install: the root manifest registers no commands. Ask for the skill by name instead. |
 | Skills changed locally but the CLI shows the old copy | Start a fresh session, or run with `--plugin-dir` pointing at your clone. |

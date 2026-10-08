@@ -1,44 +1,32 @@
 ---
-description: Implement tasks incrementally — build, test, verify, commit. Add "auto" to run the whole plan in one approved pass.
+description: Implement tasks incrementally — build, test, verify, commit. Add "auto" to run the authorized plan.
 ---
 
-Invoke the agent-skills:incremental-implementation skill alongside agent-skills:test-driven-development.
+Invoke the raiinman-agent-skills:incremental-implementation skill. Apply test-driven-development when changing executable behavior; use relevant content or configuration checks for static edits.
 
 ## Modes
 
-- **`/build`** — implement the *next* pending task, then stop (careful, one slice at a time).
-- **`/build auto`** — generate the plan if needed, get a single approval, then implement *every* task without stopping between them.
+- `/build` — implement the next pending task, then stop because this command requests one task.
+- `/build auto` — execute the authorized plan in dependency order, continuing between verified tasks.
 
-`$ARGUMENTS` selects the mode. Treat `auto` (canonical) or `all` as autonomous mode; anything else (or empty) is the default single-task mode. Note: autonomous mode is not faster *per task* — it runs the same test-driven loop — it only removes the human stepping *between* tasks.
+`$ARGUMENTS` selects the mode. Treat `auto` or `all` as whole-plan mode; empty or other arguments select the next task. Neither mode bypasses verification or expands authorization.
 
-## Default: one task
+## Per-task loop
 
-Pick the next pending task from the plan. Then:
+1. Read the task's acceptance criteria and existing decisions.
+2. Inspect relevant code and repository verification commands.
+3. For new or fixed behavior, write a meaningful failing test (RED), then implement the minimum change to pass it (GREEN). For static edits, make the scoped change and validate the affected content or configuration.
+4. Run relevant regression checks and repository-required checks. Build, typecheck, or run browser verification when the changed behavior calls for them. Broaden checks for shared paths, failures, or unresolved concerns.
+5. After verification, mark the task complete, then stage only this task's files and completion-status update. Commit them together with a descriptive message; never absorb unrelated work with blind `git add -A`.
+6. After the commit, proceed to the next authorized task in whole-plan mode; stop in single-task mode.
 
-1. Read the task's acceptance criteria
-2. Load relevant context (existing code, patterns, types)
-3. Write a failing test for the expected behavior (RED)
-4. Implement the minimum code to pass the test (GREEN)
-5. Run the full test suite to check for regressions
-6. Run the build to verify compilation
-7. Commit with a descriptive message
-8. Mark the task complete and stop
+## Whole-plan execution (`/build auto`)
 
-## Autonomous: the whole plan (`/build auto`)
-
-Use this once a spec exists and you want to collapse plan + build into one run. It removes the manual stepping between tasks — **not** the verification. Every task still earns a passing test and its own commit.
-
-1. **Require a spec.** Look only for a spec at a known path: `SPEC.md` at the repo root, `docs/SPEC.md`, or a file under `spec/`. A README or arbitrary doc does **not** count. If none exists, stop and tell the user to run `/spec` first — do not invent requirements.
-2. **Establish a clean baseline.** Run `git status --porcelain`. If there are uncommitted changes outside the expected planning artifacts (`SPEC.md`, `docs/SPEC.md`, `spec/*`, `tasks/plan.md`, `tasks/todo.md`), stop and ask the user to commit, stash, or confirm how to handle them. Autonomous per-task commits must not absorb unrelated local work, or the clean-rollback guarantee breaks.
-3. **Plan if needed.** If there is no `tasks/plan.md`, invoke agent-skills:planning-and-task-breakdown to generate one.
-4. **Single checkpoint.** Present the full plan and wait for an unambiguous affirmative (e.g. "approve", "go", "yes"). Treat hedged responses ("looks reasonable", "I guess") as **not** approved. This is the only human gate — after approval, run autonomously. If you generated `tasks/plan.md`, commit it as a single preparatory commit now so it doesn't bleed into the first task's commit.
-5. **Execute every task in dependency order.** Use each task's declared dependencies; if they aren't explicit, execute in the order the plan lists them. For each task, run the full default loop above (RED → GREEN → regression → build → commit → mark complete). Stage only the files that task touched plus its task-status update — never `git add -A` blindly — and make one commit per task so any point is a clean rollback.
-6. **Stop and ask the user** (do not push through) when:
-   - a test can't be made to pass or the build breaks without an obvious fix → follow agent-skills:debugging-and-error-recovery
-   - the spec is ambiguous, or a task needs a decision the spec doesn't cover
-   - a task is high-risk or irreversible — auth/permission changes, destructive data migrations, payments, deletions, deploys, anything touching secrets, **or anything you can't undo with `git revert`** → follow agent-skills:doubt-driven-development and get explicit sign-off before continuing
-
-   After the user resolves a blocker, they re-invoke `/build auto` — it resumes from the next pending task.
-7. **Summarize at the end:** tasks completed, tests added, commits made, and anything skipped, flagged, or left for the user.
-
-If any step fails, follow the agent-skills:debugging-and-error-recovery skill.
+1. Inspect the requirements and actual repository state. Reuse an accepted spec at `SPEC.md`, `docs/SPEC.md`, `spec/`, or the project's designated specification location. A README is context, not evidence of spec approval. Substantial or ambiguous work without settled requirements needs the spec-driven-development workflow; a small, clear task needs no artificial spec.
+2. Preserve unrelated local changes. Use `git status --porcelain` to identify them and stage only task-owned files. Ask if overlapping work prevents a safe scoped change or commit; do not demand a clean working tree merely because unrelated changes exist.
+3. For substantial work, reuse `tasks/plan.md` or invoke planning-and-task-breakdown if needed. Preserve incomplete plans for other work. Small, clear work can execute directly.
+4. Carry forward prior scope and authorization. If implementation is already authorized and requirements are settled, proceed without another approval question. If a consequential decision is unresolved or review was reserved, present the concrete plan and wait before dependent work. Commit new planning artifacts separately from implementation.
+5. Execute each authorized task in dependency order using the per-task loop. Commit each verified task individually.
+6. Resolve test or build failures through debugging-and-error-recovery. Ask when a consequential decision remains unresolved, a failure cannot be resolved within scope, or an action exceeds authorization. Assess auth, payment, migration, deletion, secret, and deployment effects against existing authorization; a sensitive file name alone does not create a new gate. Use doubt-driven-development when warranted, with paid cross-model comparisons only when explicitly requested.
+7. After an answer resolves a blocker, resume the next pending task within the same authorized run. Do not require the user to re-invoke the command.
+8. Summarize completed tasks, verification, commits, and any remaining decisions or unverified behavior.

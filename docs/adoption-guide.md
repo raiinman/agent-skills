@@ -27,7 +27,7 @@ A new project is the best-case scenario: there's no legacy behavior to preserve,
 
 ### Day 0 | Install and wire up
 
-1. Install the pack (`npx skills add addyosmani/agent-skills`, or the native integration for your tool, see [getting-started.md](getting-started.md)).
+1. Install the pack (`npx skills add raiinman/agent-skills`, or the native integration for your tool, see [getting-started.md](getting-started.md)).
 2. If the host has no native skill router, load `using-agent-skills` (the meta-skill) so the agent can route work to the right skill on its own. On hosts with native routing, install the individual skills and do not preload the meta-skill as always-on context.
 3. Add a short project rules file (`CLAUDE.md`, `.cursorrules`, etc.) with your stack, commands, and boundaries, `context-engineering` describes what belongs there.
 
@@ -43,7 +43,7 @@ Run the lifecycle in order for the project's first real feature:
 /ship   →  when going live     (shipping-and-launch)
 ```
 
-`/build auto` is a good fit for greenfield: you approve the plan once and every task still runs test-driven and commits individually. The spec and plan artifacts (`SPEC.md`, `tasks/`) are living documents, keep them in version control while the work is in flight. If the feature spans more than one session, those files are also the handoff, see [working across sessions](getting-started.md#working-across-sessions).
+`/build auto` executes the authorized plan, carrying forward accepted decisions without repeated approval. Behavior changes still follow TDD and each verified task commits individually; static edits use relevant validation. Spec and plan artifacts (`SPEC.md`, `tasks/`) are living documents for work that needs them. Keep them in version control while that work is in flight. If the feature spans more than one session, those files are also the handoff; see [working across sessions](getting-started.md#working-across-sessions).
 
 ### From the start, treat these as always-on
 

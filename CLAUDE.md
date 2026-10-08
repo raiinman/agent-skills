@@ -1,8 +1,8 @@
 # agent-skills
 
-This is the agent-skills project — a collection of production-grade engineering skills for AI coding agents.
+This is the raiinman-agent-skills personal fork of Addy Osmani's engineering skill pack, maintained primarily for Codex.
 
-> **Scope:** This file configures agents working on the [`addyosmani/agent-skills`](https://github.com/addyosmani/agent-skills) repository itself, not other projects. Don't copy it into another project or a global agent configuration; the reusable assets are the skills in `skills/`.
+> **Scope:** This file configures agents working on [`raiinman/agent-skills`](https://github.com/raiinman/agent-skills), forked from [`addyosmani/agent-skills`](https://github.com/addyosmani/agent-skills), not other projects. Don't copy it into another project or a global agent configuration; the reusable assets are the skills in `skills/`.
 
 ## Project Structure
 
@@ -46,15 +46,15 @@ Before adding a new skill or significantly reworking an existing one, run the pr
 
 ## Pull Requests
 
-PRs target the upstream repository's default branch. In a typical fork setup the upstream remote is `upstream` and your fork is `origin`, but the exact remote names are not what matters here.
+Personal-fork changes target `raiinman/agent-skills`' default branch. Send work upstream only when explicitly requested. Preserve original attribution and keep shared skill formats compatible.
 
-- Before opening a PR, search the upstream repository's open PRs and issues for work that touches the same files or rules. If any overlaps, coordinate (build on it, align your rules with it, or rebase after it merges) instead of opening a conflicting PR.
+- Before opening a PR, check the target repository for overlapping work. For explicitly requested upstream contributions, also check upstream open PRs and issues.
 - Prefer small, focused PRs over large refactors of widely shared files (for example, files under `scripts/`), which are more likely to collide with in-flight work.
 
 ## Boundaries
 
 - Always: Run the CONTRIBUTING.md pre-flight checks before creating a new skill directory
 - Always: Follow the skill-anatomy.md format for new skills
-- Always: Check the upstream repo's open PRs and issues for overlap before opening a new PR
+- Always: Check the intended target repository for overlapping PRs; keep personal changes in the fork
 - Never: Add skills that are vague advice instead of actionable processes
 - Never: Duplicate content between skills — reference other skills instead
