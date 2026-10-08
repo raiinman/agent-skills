@@ -656,3 +656,28 @@ test('materializes a git baseline and applies a working-tree patch', () => {
     fs.rmSync(workspace, { recursive: true, force: true });
   }
 });
+
+test('fixture setup does not launch background maintenance that can outlive cleanup', () => {
+  const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'eval-maintenance-test-'));
+  const globalConfig = path.join(scratch, 'gitconfig');
+  const traceFile = path.join(scratch, 'trace.jsonl');
+  fs.writeFileSync(globalConfig, '[maintenance]\n\tauto = true\n\tautoDetach = true\n');
+  const previous = { GIT_CONFIG_GLOBAL: process.env.GIT_CONFIG_GLOBAL, GIT_TRACE2_EVENT: process.env.GIT_TRACE2_EVENT };
+  let workspace;
+  try {
+    process.env.GIT_CONFIG_GLOBAL = globalConfig;
+    process.env.GIT_TRACE2_EVENT = traceFile;
+    workspace = materializeWorkspace({ files: ['git-workflow-and-versioning'] });
+    const events = fs.readFileSync(traceFile, 'utf8').trim().split('\n').map(JSON.parse);
+    const maintenance = events.filter((event) => event.event === 'child_start' &&
+      event.argv.some((arg) => arg === 'maintenance' || arg === 'gc'));
+    assert.deepEqual(maintenance, [], 'temporary fixture commits must not spawn maintenance');
+  } finally {
+    for (const [name, value] of Object.entries(previous)) {
+      if (value === undefined) delete process.env[name];
+      else process.env[name] = value;
+    }
+    if (workspace) fs.rmSync(workspace, { recursive: true, force: true });
+    fs.rmSync(scratch, { recursive: true, force: true });
+  }
+});

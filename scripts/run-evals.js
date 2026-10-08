@@ -382,7 +382,7 @@ function runDeterministic(minRank1) {
   process.exit(errors ? 1 : 0);
 }
 
-// ---------- tier 3 (opt-in, via claude -p) ----------
+// ---------- tier 3 (opt-in, via selected headless backend) ----------
 
 function materializeWorkspace(ev, fixturesDir = FIXTURES_DIR) {
   // Fresh throwaway project dir per eval; fixtures (if any) copied in so the
@@ -411,6 +411,10 @@ function materializeWorkspace(ev, fixturesDir = FIXTURES_DIR) {
     // commit. A local identity keeps this deterministic and never leaves the
     // throwaway workspace.
     execFileSync('git', ['init', '--quiet'], { cwd: workspace });
+    // Detached maintenance can outlive a fixture commit and race workspace
+    // removal. These repositories live for one eval and need no housekeeping.
+    execFileSync('git', ['config', 'maintenance.auto', 'false'], { cwd: workspace });
+    execFileSync('git', ['config', 'gc.auto', '0'], { cwd: workspace });
     execFileSync('git', ['config', 'core.autocrlf', 'false'], { cwd: workspace });
     execFileSync('git', ['config', 'user.name', 'Skill Eval'], { cwd: workspace });
     execFileSync('git', ['config', 'user.email', 'skill-eval@example.invalid'], { cwd: workspace });
