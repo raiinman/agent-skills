@@ -7,7 +7,7 @@ How this repo measures whether its skills actually work: that they **trigger** w
 There is no single settled community standard for evaluating `SKILL.md` skills, but two approaches lead:
 
 - **Anthropic's skill-creator v2** defines a per-skill `evals.json` (prompt + `expectations[]`, graded from the transcript) plus trigger-accuracy testing of descriptions against sample prompts. We adopt its [`evals.json` schema](https://github.com/anthropics/skills/tree/main/skills/skill-creator) for our behavioral tier and add one optional `kind` field to select the artifact being graded.
-- **Superpowers** (obra) tests skills with bash + `claude -p` + prompt fixtures and grader scripts. Our behavioral runner follows the same headless-`claude` pattern, with the grading rubric drawn from `expectations[]`.
+- **Superpowers** (obra) tests skills with bash + `claude -p` + prompt fixtures and grader scripts. Our behavioral runner follows that headless execution pattern for Claude Code and Codex, with the grading rubric drawn from `expectations[]`.
 
 What neither provides is a **deterministic, CI-safe** check for a multi-skill *catalog* — does each skill's description carry the vocabulary users actually say, and do two skills' descriptions collide? That's Tier 2 below, and it's this repo's addition.
 
@@ -30,19 +30,28 @@ node scripts/run-evals.js --min-rank1 95  # enforce the current routing floor
 
 # Tier 3 — preview is free; live executor and grader calls spend tokens
 node scripts/run-evals.js --behavioral test-driven-development --dry-run  # prints the plan only
+node scripts/run-evals.js --behavioral test-driven-development --backend codex --dry-run
 
-# Set these environment variables to exact model IDs before a live comparison
+# Claude remains the default backend. Set exact model IDs before a requested live comparison.
 node scripts/run-evals.js --behavioral test-driven-development \
+  --executor-model "$EVAL_EXECUTOR_MODEL" --grader-model "$EVAL_GRADER_MODEL"
+
+# Codex uses the selected backend for both execution and grading.
+node scripts/run-evals.js --behavioral test-driven-development --backend codex \
   --executor-model "$EVAL_EXECUTOR_MODEL" --grader-model "$EVAL_GRADER_MODEL"
 ```
 
-Tier 3 uses the existing Claude Code backend and supports two behavioral artifact kinds. `execution` is the default: each eval runs in a throwaway git repository, archived project inputs from `files[]` are materialized and committed as the baseline, and the grader judges the full `--output-format stream-json --verbose` execution trace, including tool calls. `dialogue` is reserved for skills whose deliverable is the conversation itself; it may omit fixtures, or supply context files that are materialized in the same way. The grader judges conversational turns without requiring file edits or commands. Claiming `dialogue` is a human-reviewed exemption, not an escape hatch for execution skills.
+Tier 3 supports Claude Code (the default) and Codex (`--backend codex`), with two behavioral artifact kinds. `execution` is the default: each eval runs in a throwaway git repository, archived project inputs from `files[]` are materialized and committed as the baseline, and the grader judges the full JSONL execution trace, including tool calls. `dialogue` is reserved for skills whose deliverable is the conversation itself; it may omit fixtures, or supply context files that are materialized in the same way. The grader judges conversational turns without requiring file edits or commands. Claiming `dialogue` is a human-reviewed exemption, not an escape hatch for execution skills.
 
-The executor loads a snapshot of the whole plugin using `--plugin-dir`: all skills, their supporting files, shared references, personas, command adapters, and runtime helpers remain together. The package stays outside the fixture's git history. A short instruction selects the target skill; its body is loaded by the host rather than injected without its assets. This measures explicitly selected skill behavior. Natural host routing and plugin-versus-baseline effects remain separate plugin evals below.
+Both backends snapshot the whole package: all skills, their supporting files, shared references, personas, command adapters, and runtime helpers remain together, outside the fixture's git history. Claude loads it with `--plugin-dir`. Codex receives `$<skill-name>` and the exact archived `SKILL.md` path over stdin; the instruction asks it to read that file and follow its supporting references. Codex's loading mode is recorded as `explicit-path`: this does not install the plugin or measure native plugin discovery. Both modes measure explicitly selected skill behavior. Natural host routing and plugin-versus-baseline effects remain separate evaluations.
 
-The executor uses `acceptEdits` with an explicit available/pre-approved tool list, including `Skill` and `Agent`, so it can perform the workflow. The grader runs in a separate empty workspace with `--safe-mode`, no built-in tools, and MCP tools denied. Trace contents are marked as untrusted evidence and passed over stdin. Both calls carry timeouts and disable session persistence. These flags follow the [Claude Code CLI reference](https://code.claude.com/docs/en/cli-reference); use a CLI version supporting them. Authentication and host-managed policy still depend on the installed environment.
+Claude's executor uses `acceptEdits` with an explicit available/pre-approved tool list, including `Skill` and `Agent`. Its grader runs in a separate empty workspace with `--safe-mode`, no built-in tools, and MCP tools denied. These flags follow the [Claude Code CLI reference](https://code.claude.com/docs/en/cli-reference); use a CLI version supporting them.
 
-Live runs require both `--executor-model` and `--grader-model`; the runner passes an explicit model selection to each call. Prefer exact IDs to aliases that may change. Requested IDs, observed executor/grader model identities, Claude and Node versions, platform, repository commit/dirty state, and input content hashes are recorded. When a response does not report an observed model, that field stays null or empty rather than being guessed from the requested ID.
+Codex uses `exec --json --ephemeral --ignore-user-config` and `approval_policy="never"`. The executor uses `workspace-write`, enables multi-agent work, and explicitly grants write access to the throwaway repository's `.git` directory so skills can commit. Its grader uses a separate workspace with `read-only`, a JSON output schema, and shell, multi-agent, browser, computer, and code-mode features disabled; web search is disabled too. Plugins, apps, hooks, memories, and goals are disabled for both calls. The flags were checked against Codex CLI 0.151.0 and the [official CLI reference](https://developers.openai.com/codex/cli/reference). This is a restricted grader configuration, not proof that every possible tool is unavailable.
+
+Trace contents are marked as untrusted evidence and passed over stdin. Both backends carry timeouts and disable session persistence. Authentication, managed policy, and any host-level instructions still depend on the installed environment. Dependencies such as external MCP services are not provisioned by the runner.
+
+Live runs require both `--executor-model` and `--grader-model`; the runner passes an explicit model selection to each call. Prefer exact IDs to aliases that may change. Requested IDs, observed executor/grader model identities, backend/loading mode, CLI and Node versions, platform, repository commit/dirty state, and input content hashes are recorded. Codex events may omit the resolved model identity. When a response does not report an observed model, that field stays null or empty rather than being guessed from the requested ID.
 
 ### Retained evidence
 
@@ -50,13 +59,13 @@ Every live invocation creates a unique timestamped directory under `evals/result
 
 - `run.json` and per-eval `*.run.json`: configuration, input fingerprints, completion status, and failure details.
 - `package/`, `fixtures/`, and `case.json`: the plugin and case inputs used in the run, including fixture setup patches.
-- `*.trace.jsonl`: complete returned executor trace; a failed subprocess's partial stdout/stderr is saved separately.
-- `*.grader-response.json`: raw grader envelope, including response/model metadata.
+- `*.executor-prompt.txt` and `*.trace.jsonl`: the exact executor prompt and complete returned trace; a failed subprocess's partial stdout/stderr is saved separately.
+- `*.grader-response.json` (Claude) or `*.grader-response.jsonl` (Codex): raw grader output, including any response/model metadata.
 - `*.grading.json`: validated expectation results in skill-creator's grading shape; malformed grading is retained as raw evidence and fails the run.
 
 Executor error or incomplete results are never graded as successful execution. Earlier run directories are not cleared or overwritten. Temporary executor/grader workspaces are removed after each eval; the retained evidence remains gitignored and local. Compare configuration and fingerprints before attributing score differences to a skill edit. Archived inputs improve auditability, but stochastic models and changes in provider or managed policy still prevent a promise of identical reruns.
 
-Discipline skills also include pressure cases for time pressure, sunk cost, and authority pressure. Local regression tests use fake CLI responses to verify package loading, model flags, evidence retention, and failure handling without invoking a provider. They do not establish live model behavior or Codex/Gemini runtime compatibility.
+Discipline skills also include pressure cases for time pressure, sunk cost, and authority pressure. Local regression tests use fake CLI responses to verify both backend adapters, package loading, model flags, evidence retention, and failure handling without invoking a provider. They do not establish live model behavior, Codex sandbox enforcement, or Gemini runtime compatibility. A paid run still requires an explicit request.
 
 ## Plugin evals (Claude Code)
 
