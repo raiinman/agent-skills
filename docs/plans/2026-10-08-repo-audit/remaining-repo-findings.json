@@ -1,0 +1,1464 @@
+{
+  "baseline": "22848dae4944572260933fda6a4f6d2912ec1fb4",
+  "date": "2026-10-08",
+  "scope": "Remaining work after completed PRs 1-5",
+  "implementation_authorized": false,
+  "coverage": {
+    "missing": 0,
+    "reviewed": 218,
+    "tracked": 218
+  },
+  "content": {
+    "baseline": "22848dae4944572260933fda6a4f6d2912ec1fb4",
+    "repoRoot": "C:/Users/mikea/Documents/Codex/2026-10-07/new-chat/work/agent-skills",
+    "scope": "All 25 skills, all seven local support files, all seven shared references: 39 files fully read. No repository changes. Prior PR1–5 resolved findings excluded; residual conflicting instructions explicitly identified.",
+    "findings": [
+      {
+        "id": "C01",
+        "priority": "P1",
+        "kind": "bug",
+        "file": "skills/constraint-driven-development/references/floor-guard.md",
+        "line": 50,
+        "relatedLines": "30–32,52–54,64–74,84",
+        "title": "Git-quoted paths silently evade the floor guard",
+        "triggerEvidence": "Real Git reproduction: untracked newé.test.js containing it.skip returns exit 0 / floor-guard: clean. ls-files prints a C-quoted path, which is passed literally to diff --no-index; its path-access failure exits 1 with empty stdout and is mistaken for a normal diff. A second reproduction changes tracked é/CONSTRAINTS.md coverage minimum 80→10 and also returns clean because quoted diff headers fail path matching. Results saved in content-probes-results.json.",
+        "impact": "The claimed untracked/staged/working-tree enforcement can approve a skipped test or weakened constraint solely because a filename contains ordinary Unicode. Escaped quotes/tabs have the same parsing mechanism.",
+        "remedy": "Use NUL-delimited ls-files, decode or avoid quoted diff path headers, and distinguish nonzero path/IO errors from genuine no-index differences. Keep errors exit 2 rather than clean.",
+        "validation": "Extract the shipped reference, run actual Git fixtures with ASCII/Unicode/quotes paths, untracked/staged/tracked variants, and missing-file diff errors. Assert violation 1 or execution-error 2, never clean.",
+        "confidence": "high; executable reproduction"
+      },
+      {
+        "id": "C02",
+        "priority": "P1",
+        "kind": "bug",
+        "file": "skills/constraint-driven-development/references/floor-guard.md",
+        "line": 82,
+        "relatedLines": "12,167",
+        "title": "Violation diagnostics expose matched source values despite redaction contract",
+        "triggerEvidence": "An added config.js line const token = 'AUDIT_FAKE_TOKEN'; // TODO load from environment produces stderr containing AUDIT_FAKE_TOKEN verbatim. flag stores the raw first 120 source characters and the reporting loop prints them. The contract explicitly promises never the matched secret value.",
+        "impact": "The quality gate can copy credentials from source into CI logs and agent context, violating the security rule and its own public contract.",
+        "remedy": "Report rule, decoded path and line location without raw source by default. If contextual snippets are offered, redact at capture time and define a conservative policy rather than assuming truncation is redaction.",
+        "validation": "Use recognizable fake credentials alongside each regex trigger and constraint diff. Assert no fake value appears in stdout/stderr while location/rule remain actionable.",
+        "confidence": "high; executable reproduction"
+      },
+      {
+        "id": "C03",
+        "priority": "P2",
+        "kind": "bug",
+        "file": "skills/debugging-and-error-recovery/SKILL.md",
+        "line": 232,
+        "relatedLines": "233–241",
+        "title": "The graceful-degradation try/catch cannot catch a child React render failure",
+        "triggerEvidence": "return <Chart data={data}/> creates a React element. Chart renders later, outside this try/catch. React's official error-boundaries lint documentation uses this exact anti-pattern and requires an Error Boundary.",
+        "impact": "Copying the example leaves a chart crash unhandled and can remove the UI instead of rendering ErrorState.",
+        "remedy": "Use a project Error Boundary around Chart; distinguish render failures from synchronous data processing, events and async callbacks.",
+        "validation": "Render a child Chart that throws and verify ErrorState appears; test the empty-data branch separately. Use the existing project boundary when available.",
+        "confidence": "high; primary React documentation",
+        "source": "https://react.dev/reference/eslint-plugin-react-hooks/lints/error-boundaries"
+      },
+      {
+        "id": "C04",
+        "priority": "P2",
+        "kind": "bug",
+        "file": "skills/frontend-ui-engineering/SKILL.md",
+        "line": 85,
+        "relatedLines": "81–88",
+        "title": "The data-container error branch references undeclared refetch",
+        "triggerEvidence": "The function destructures only tasks, isLoading and error from useTasks. When error is truthy, JSX evaluates retry={refetch}; no refetch exists in scope.",
+        "impact": "TypeScript rejects the advertised example; in emitted JavaScript the first failed query crashes the error display with ReferenceError.",
+        "remedy": "Destructure the actual retry/refetch API or supply a declared callback, preserving the detected hook contract.",
+        "validation": "Typecheck the extracted container against a small useTasks stub and exercise its error branch.",
+        "confidence": "high; lexical scope evidence"
+      },
+      {
+        "id": "C05",
+        "priority": "P2",
+        "kind": "bug",
+        "file": "skills/frontend-ui-engineering/SKILL.md",
+        "line": 304,
+        "relatedLines": "305–316",
+        "title": "Optimistic whole-list rollback erases unrelated successful mutations",
+        "triggerEvidence": "A starts toggling task a and snapshots the list. B then toggles b and succeeds. A subsequently fails; onError restores A's entire earlier snapshot, reverting b in client cache although b succeeded on the server. A network-free transcription of the documented cache transforms reproduced client b=false/server b=true. The hook has no onSettled invalidation or success reconciliation.",
+        "impact": "Users see lost updates and stale state indefinitely, even when requests target different tasks.",
+        "remedy": "Choose a concurrency policy: serialize relevant mutations, perform per-item/version-aware rollback, or reconcile from the server after the last overlapping mutation. Include settled/error synchronization and define retry-safe server semantics.",
+        "validation": "Use deferred promises to exercise both completion orders, failure of one concurrent mutation, two toggles of the same task, and refetch reconciliation. No paid/provider calls needed.",
+        "confidence": "high; executable algorithm reproduction"
+      },
+      {
+        "id": "C06",
+        "priority": "P2",
+        "kind": "bug",
+        "file": "skills/security-and-hardening/references/hardening-patterns.md",
+        "line": 111,
+        "relatedLines": "112–113",
+        "title": "Public-user projection is a denylist that leaks new sensitive fields",
+        "triggerEvidence": "sanitizeUser removes passwordHash and resetToken but returns every other property. Adding oauthAccessToken to UserRecord makes it appear in the response without any sanitizer change. The scratch reproduction returns AUDIT_FAKE_OAUTH. Structural TypeScript typing does not strip runtime extra properties.",
+        "impact": "A schema addition silently exposes credentials or private profile fields through the recommended prevention pattern.",
+        "remedy": "Construct PublicUser from explicit allowlisted fields or parse through a stripping response schema. Keep public-field selection deliberate as the model evolves.",
+        "validation": "Add an unknown sensitive field to a fake record and assert the result contains only allowed public keys; keep this test independent of a specific token name.",
+        "confidence": "high; executable reproduction"
+      },
+      {
+        "id": "C07",
+        "priority": "P2",
+        "kind": "bug",
+        "file": "skills/planning-and-task-breakdown/SKILL.md",
+        "line": 255,
+        "relatedLines": "139; skills/spec-driven-development/SKILL.md:201–203",
+        "title": "Mandatory five-file exit gate contradicts proportional task sizing",
+        "triggerEvidence": "Planning line 139 explicitly allows a clear mechanical change across many files to remain atomic, but verification line 255 forbids any task touching more than ~5 files. Spec line 201 repeats the hard cap while deferring to planning as canonical.",
+        "impact": "A valid 20-file mechanical rename cannot satisfy the same workflow's exit checklist. The agent may split a coherent migration or ask for unnecessary plan approval.",
+        "remedy": "Make verification check risk, independent outcomes and dependency boundaries, with file count as an estimate. Remove the duplicated mandatory cap from spec.",
+        "validation": "Review behavioral scenarios: atomic 20-file mechanical change, risky one-file change, and multi-subsystem feature; require appropriate sizing without a numeric gate.",
+        "confidence": "high; direct internal contradiction; residual checklist drift after proportionality fixes"
+      },
+      {
+        "id": "C08",
+        "priority": "P2",
+        "kind": "bug",
+        "file": "skills/incremental-implementation/SKILL.md",
+        "line": 183,
+        "relatedLines": "147,178",
+        "title": "Separating deletion and replacement creates broken intermediate commits",
+        "triggerEvidence": "The skill requires each increment remain working, then instructs avoiding deletion and replacement in the same commit. Replacing an exported helper still used by a caller requires either an atomic replacement or adding the successor before migration; a delete-only increment cannot compile.",
+        "impact": "Following the literal rollback-friendly rule breaks the build or forces unnecessary compatibility scaffolding for a simple replacement.",
+        "remedy": "Prefer add successor → migrate consumers → delete old, while allowing atomic replacement when that is the smallest working increment. Separate independent destructive operations, not inseparable implementation changes.",
+        "validation": "Walk a helper replacement and public interface migration through commit-by-commit build/revert behavior.",
+        "confidence": "high; reachable workflow contradiction"
+      },
+      {
+        "id": "C09",
+        "priority": "P2",
+        "kind": "bug",
+        "file": "skills/incremental-implementation/SKILL.md",
+        "line": 182,
+        "relatedLines": "skills/deprecation-and-migration/SKILL.md:184,188",
+        "title": "Unconditional down-migration requirement conflicts with destructive data recovery",
+        "triggerEvidence": "Incremental still says every database migration should have a corresponding rollback migration; deprecation now correctly distinguishes down migrations from retained-data restore/forward fixes. Recreating a dropped column does not recover its data.",
+        "impact": "An agent can treat a schema-only down migration as meeting the rollback checklist or impose a misleading recovery requirement.",
+        "remedy": "Require a tested recovery path and link to migration's canonical reversible-versus-destructive distinction.",
+        "validation": "Evaluate additive and destructive examples; ensure the latter states retained data, restore/forward-fix steps and point of code rollback incompatibility.",
+        "confidence": "high; residual cross-skill drift, not a repeat of the repaired migration example"
+      },
+      {
+        "id": "C10",
+        "priority": "P2",
+        "kind": "bug",
+        "file": "skills/interview-me/SKILL.md",
+        "line": 203,
+        "relatedLines": "117–119,129–130",
+        "title": "Rationalization table still requires re-asking delegated decisions",
+        "triggerEvidence": "Step 5 allows 'whatever you think is best' to delegate judgment inside settled scope, and Step 6 continues already-authorized work. The table categorically says 'Whatever you think' is delegation, not decision; re-ask with two options.",
+        "impact": "The same skill directs the agent to repeat questions after the user already delegated a routine choice, undermining the authorization fixes and annoying the user.",
+        "remedy": "Apply the same settled-scope versus unresolved consequential-constraint condition in the table.",
+        "validation": "Dialogue scenario with settled outcome/constraint and explicit delegation should continue; ambiguous outcome should still ask. Preserve no-confirmation-from-silence behavior.",
+        "confidence": "high; residual internal contradiction"
+      },
+      {
+        "id": "C11",
+        "priority": "P2",
+        "kind": "bug",
+        "file": "skills/context-engineering/SKILL.md",
+        "line": 75,
+        "title": "Cursor project-rule filename extension is wrong",
+        "triggerEvidence": "The skill recommends .cursor/rules/*.md. Current official Cursor documentation identifies project rules as *.mdc in .cursor/rules, with frontmatter controlling applicability. Legacy .cursorrules is a separate fallback.",
+        "impact": "A user following the modern directory path can create ordinary Markdown files that do not establish the intended project rule configuration.",
+        "remedy": "Use .mdc plus minimal metadata and link to the host's native current docs; label .cursorrules legacy.",
+        "validation": "Verify the example against Cursor rule-format documentation and, if available, a host discovery smoke test. Do not silently rename user's existing configuration.",
+        "confidence": "high; current primary docs via Context7",
+        "source": "https://cursor.com/docs/rules"
+      },
+      {
+        "id": "C12",
+        "priority": "P2",
+        "kind": "bug",
+        "file": "skills/documentation-and-adrs/SKILL.md",
+        "line": 114,
+        "relatedLines": "115–119",
+        "title": "The example comment falsely calls a fixed-window reset a sliding window",
+        "triggerEvidence": "The code holds a single counter and resets it when now-windowStart exceeds WINDOW_SIZE_MS. It stores no request history/rolling buckets. Requests on either side of the reset can consume two budgets within a short interval, the exact burst behavior the comment claims to prevent.",
+        "impact": "A documentation example teaching accurate why-comments instead trains agents to add a false security rationale to ordinary fixed-window logic.",
+        "remedy": "Correct the rationale to fixed-window semantics or show a real bounded rolling-window/token-bucket mechanism if preventing boundary bursts is the goal.",
+        "validation": "Check timestamps immediately before and after the reset. If a real limiter is supplied, assert the configured short-window burst bound.",
+        "confidence": "high; algorithm inspection"
+      },
+      {
+        "id": "C13",
+        "priority": "P2",
+        "kind": "bug",
+        "file": "references/performance-checklist.md",
+        "line": 85,
+        "title": "Blanket removal of Cache-Control no-store sacrifices sensitive-page policy for outdated bfcache guidance",
+        "triggerEvidence": "The checklist requires no Cache-Control:no-store on HTML responses. An authenticated page containing sensitive data is a direct counterexample: Chrome's official docs say such pages should use no-store and document conditional bfcache support rolled out in March–April 2025.",
+        "impact": "A performance pass can remove a privacy/cache-control protection even where it is required, and the claimed blanket bfcache incompatibility is no longer true for Chrome.",
+        "remedy": "Retain no-store where data policy needs it; remove unnecessary no-store only on nonsensitive pages. Test browser-specific bfcache eligibility and logout/restore correctness rather than treating HTTP cache and bfcache as one policy.",
+        "validation": "Browser scenario with sensitive page, logout, back/forward and pageshow restoration; verify response cache headers remain aligned with privacy requirements. Cite browser/version limits.",
+        "confidence": "high; primary Chrome docs",
+        "source": "https://developer.chrome.com/docs/web-platform/bfcache-ccns"
+      },
+      {
+        "id": "C14",
+        "priority": "P2",
+        "kind": "bug",
+        "file": "skills/performance-optimization/references/optimization-patterns.md",
+        "line": 51,
+        "relatedLines": "50–52; skills/performance-optimization/SKILL.md:129; references/performance-checklist.md:99",
+        "title": "Query-plan diagnosis treats estimation error as proof of stale statistics",
+        "triggerEvidence": "The guide says an order-of-magnitude row-estimate error means stale statistics, and prescribes ANALYZE. PostgreSQL's official correlated-column example runs on analyzed data and still estimates 1 row when 100 match until CREATE STATISTICS (dependencies) is added. A sequential scan also does not prove no usable index; the planner may deliberately choose it.",
+        "impact": "Agents can repeatedly refresh correct statistics, add redundant indexes, or revert a useful change based on an incorrect deterministic diagnosis.",
+        "remedy": "Present these signatures as hypotheses: inspect fresh/stale stats, skew, cross-column correlation, selectivity and planner costs. Mention extended statistics where measured correlation explains the error.",
+        "validation": "Use PostgreSQL's analyzed correlated-column fixture and a low-selectivity usable-index query; ensure diagnosis recommends investigation rather than declaring one cause.",
+        "confidence": "high; documented counterexample, database execution not performed",
+        "source": "https://www.postgresql.org/docs/16/multivariate-statistics-examples.html"
+      },
+      {
+        "id": "C15",
+        "priority": "P2",
+        "kind": "bug",
+        "file": "references/accessibility-checklist.md",
+        "line": 74,
+        "relatedLines": "72–75",
+        "title": "The HTML label example uses JSX-only htmlFor",
+        "triggerEvidence": "Copying the fenced HTML into an ordinary page creates an unknown htmlfor attribute rather than associating the sibling label and input. MDN distinguishes the HTML for attribute from the JavaScript htmlFor reflection property.",
+        "impact": "The example advertised as explicit label association leaves the email field unnamed for assistive technology and makes clicking its label ineffective.",
+        "remedy": "Use for in the HTML example or clearly label the snippet JSX/TSX with htmlFor, and keep all examples in the block syntactically consistent.",
+        "validation": "Load the HTML and assert input.labels contains its label and accessible name is Email address; separately typecheck JSX if retained.",
+        "confidence": "high; primary HTML documentation",
+        "source": "https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Elements/label"
+      },
+      {
+        "id": "C16",
+        "priority": "P2",
+        "kind": "bug",
+        "file": "references/testing-patterns.md",
+        "line": 215,
+        "relatedLines": "219–220; skills/frontend-ui-engineering/SKILL.md:66–68",
+        "title": "E2E example confuses list-item text with accessible name and asserts CSS on the wrong node",
+        "triggerEvidence": "For the pack's ordinary <li><span>Buy groceries</span></li> markup, listitem does not obtain its accessible name from child text; getByRole(listitem,{name:...}) does not locate it. The frontend applies line-through to the span, while this test checks text-decoration-line on li. Playwright's official TodoMVC examples locate listitem using filter({hasText}) then assert a checkbox state.",
+        "impact": "A correctly functioning create/complete flow fails or times out when users combine the pack's UI and test patterns.",
+        "remedy": "Filter the list item by descendant text, require an actually labeled checkbox, and assert checked state or the title element's actual decoration.",
+        "validation": "One minimal task fixture using the shipped TaskItem markup; run the test through create and complete with real browser rendering. This audit verified docs/markup, not a full browser execution.",
+        "confidence": "high for the explicitly stated ordinary markup; browser regression still required",
+        "source": "https://playwright.dev/docs/locators#filter-by-text"
+      },
+      {
+        "id": "C17",
+        "priority": "P2",
+        "kind": "bug",
+        "file": "skills/ci-cd-and-automation/SKILL.md",
+        "line": 206,
+        "relatedLines": "210;140",
+        "title": "The preview job still requires a repository secret on every fork PR",
+        "triggerEvidence": "deploy-preview runs for every pull_request and passes secrets.VERCEL_TOKEN. Fork/Dependabot PRs receive no repository secrets, as this same skill now explicitly explains for integration tests. The secret expands empty and an unattended authenticated Vercel deploy cannot succeed.",
+        "impact": "The advertised every-PR preview job fails on normal contributor PRs and may tempt an unsafe pull_request_target workaround.",
+        "remedy": "Separate trusted deploy jobs from untrusted PR checks, skip or use an appropriately isolated trusted preview mechanism, and describe the missing-preview result. Pin/setup the CLI and intended project context.",
+        "validation": "Evaluate job conditions for same-repo, fork and Dependabot events with absent secrets; local mock can confirm no privileged deployment is attempted. Do not run real Vercel deployments.",
+        "confidence": "high; workflow condition and GitHub documented secret behavior",
+        "source": "https://docs.github.com/en/actions/security-for-github-actions/security-guides/using-secrets-in-github-actions"
+      },
+      {
+        "id": "C18",
+        "priority": "P3",
+        "kind": "bug",
+        "file": "skills/ci-cd-and-automation/SKILL.md",
+        "line": 325,
+        "title": "setup-node cache is incorrectly described as caching node_modules",
+        "triggerEvidence": "The optimization tree recommends setup-node cache for node_modules, but its official README explicitly says that action caches global package-manager data and does not cache node_modules.",
+        "impact": "Users expect install/build work to disappear or configure the wrong cache when investigating CI duration.",
+        "remedy": "Distinguish package download cache from installed dependencies; keep npm ci and measure which step dominates before changing caching strategy.",
+        "validation": "Doc check against the chosen action version, plus timing/install logs if a caching change is proposed.",
+        "confidence": "high; primary action documentation",
+        "source": "https://github.com/actions/setup-node#caching-global-packages-data"
+      },
+      {
+        "id": "C19",
+        "priority": "P3",
+        "kind": "bug",
+        "file": "references/orchestration-patterns.md",
+        "line": 139,
+        "relatedLines": "162–166; AGENTS.md plugin restrictions",
+        "title": "Subagent MCP-frontmatter claim contradicts this pack's plugin restrictions",
+        "triggerEvidence": "Line139 says skills and mcpServers frontmatter are honored in a persona subagent, then line164 says plugin subagents silently ignore mcpServers. This repository's personas are plugin agents, so the earlier unqualified claim is false for the described installation.",
+        "impact": "A future persona configured with an MCP dependency can lose required tools despite being advertised as correctly configured.",
+        "remedy": "Qualify local/user-agent versus plugin-agent support and make session-level MCP configuration the portable requirement.",
+        "validation": "Compare all relevant installation modes against current host docs; a fake/config-only discovery smoke test can verify available tools without making external provider calls.",
+        "confidence": "high; direct internal contradiction"
+      },
+      {
+        "id": "C20",
+        "priority": "P3",
+        "kind": "bug",
+        "file": "skills/code-simplification/SKILL.md",
+        "line": 219,
+        "relatedLines": "220–227;34",
+        "title": "Array loop-to-filter rewrite changes sparse-array error behavior",
+        "triggerEvidence": "With users=new Array(1), for...of visits the hole as undefined and user.isActive throws; Array.filter skips holes and returns []. The scratch reproduction confirms this difference. The skill explicitly promises identical edge-case/error behavior for every input.",
+        "impact": "Blind application changes the failure contract for sparse arrays or custom iteration. It is low risk in a proven dense plain-array domain, but that prerequisite is unstated.",
+        "remedy": "State the dense ordinary-array/no custom-iterator precondition, or retain equivalent iteration when the broader contract matters. Avoid presenting arbitrary syntactic rewrites as universal identities.",
+        "validation": "Compare dense, sparse and overridden-iterator arrays; test the domain's actual accepted inputs rather than forcing support for out-of-contract values.",
+        "confidence": "high reproduction; task impact conditional on accepted array contract"
+      },
+      {
+        "id": "C21",
+        "priority": "P3",
+        "kind": "bug",
+        "file": "skills/observability-and-instrumentation/SKILL.md",
+        "line": 188,
+        "relatedLines": "185–190",
+        "title": "The minimum runbook references a nonexistent Step 2 and compares global sessions to one pool",
+        "triggerEvidence": "The shown three-line runbook says 'if count > pool limit, see Step 2' but contains no Step2. Its pg_stat_activity count covers all client backends; two healthy application instances each holding 10 sessions produce count20 > per-process pool limit10 without either pool being exhausted.",
+        "impact": "On-call follows a dead instruction and can misdiagnose normal multi-instance operation as exhaustion.",
+        "remedy": "Make the minimal runbook self-contained; identify service/instance/application_name, pool waits and the database-wide ceiling, or link a real expanded runbook rather than a phantom step.",
+        "validation": "Walk the runbook with single-instance exhaustion, healthy multiple instances and unrelated client sessions. No production DB access needed for a fixture.",
+        "confidence": "high for missing step and aggregation mismatch; no DB execution performed"
+      }
+    ],
+    "opportunities": [
+      {
+        "id": "O01",
+        "kind": "enhancement",
+        "file": "skills/code-review-and-quality/SKILL.md",
+        "line": 164,
+        "title": "Scope mutation experiments and make review-only checkout preservation explicit",
+        "evidence": "The skill mandates invert/run/restore for the last review question, while line241 says review-only produces findings not edits. Snapshot restoration is not interruption-safe and can overwrite newer concurrent edits.",
+        "remedy": "Use an isolated disposable checkout and make mutation probes proportional to the claim being assessed; for explicit read-only reviews, record the unrun experiment instead of touching the reviewed tree.",
+        "validation": "Review-only fixture stays byte-identical after normal execution and interruption. Decisions: should manual mutation be mandatory for every review or only high-risk/test-adequacy questions?",
+        "confidence": "high guidance conflict; no harmful operation executed"
+      },
+      {
+        "id": "O02",
+        "kind": "enhancement",
+        "file": "skills/api-and-interface-design/SKILL.md",
+        "line": 184,
+        "title": "Specify idempotency-key security scope and unknown-outcome reconciliation",
+        "evidence": "The worked store is unique by key alone and replayOrReject is unspecified. In a multitenant API, caller-generated keys must be scoped to an authenticated principal/operation and replay authorization must be rechecked. The later text recognizes unknown outcomes but does not show a resolver or safe recovery policy.",
+        "remedy": "Add principal/operation scoping, canonical request hash, provider intent key propagation and bounded status/reconciliation behavior. Do not expand into a full payment implementation.",
+        "validation": "Same raw key from two principals cannot replay another principal's response; crash after effect before result persistence cannot duplicate an effect; unknown remains pending until evidence resolves it.",
+        "confidence": "medium; risk conditional on unshown authentication/replay implementation, not a proven leak"
+      },
+      {
+        "id": "O03",
+        "kind": "enhancement",
+        "file": "skills/frontend-ui-engineering/SKILL.md",
+        "line": 67,
+        "relatedLines": "69–70",
+        "title": "Show accessible names in the primary task-item example",
+        "evidence": "The example passes no label/name to its checkbox or icon-only delete button. Actual custom component/icon internals are not supplied, so this audit does not claim a guaranteed rendered accessibility failure.",
+        "remedy": "Make labels explicit at the example call site, use a label tied to the title for the checkbox and an action+task name for deletion.",
+        "validation": "Render the actual project components and inspect accessible names/keyboard operation; don't assume an SVG icon supplies a useful name.",
+        "confidence": "medium; missing evidence rather than proven custom-component behavior"
+      },
+      {
+        "id": "O04",
+        "kind": "enhancement",
+        "file": "skills/browser-testing-with-devtools/SKILL.md",
+        "line": 28,
+        "title": "Use host-native MCP setup routing for Codex-first installs",
+        "evidence": "Installation only gives Claude .mcp.json/settings. This is valid for Claude but does not tell a Codex user where to configure the same server. Existing host docs outside this assignment may cover it.",
+        "remedy": "Link the canonical host setup docs and keep one shared server-args example; choose adapter config based on detected host.",
+        "validation": "Check installed host guidance and a config/discovery-only smoke test; no browser/account effects or installs during the audit.",
+        "confidence": "high missing local guidance; final remedy must merge with docs agent's platform audit"
+      },
+      {
+        "id": "O05",
+        "kind": "measurement",
+        "file": "skills/git-workflow-and-versioning/SKILL.md",
+        "line": 113,
+        "relatedLines": "skills/frontend-ui-engineering/SKILL.md:337; skills/performance-optimization/SKILL.md:194–200; skills/context-engineering/SKILL.md context-budget heuristics",
+        "title": "Label task-size, UI-size and performance budgets as project-specific heuristics",
+        "evidence": "The pack includes ~100-line PR targets, 200-line component split rules and universal bundle/time budgets without linking them to the project's readability, user hardware or service SLO. Some nearby sections already make thresholds example-based.",
+        "remedy": "Retain useful defaults but say how to choose/override them from evidence; avoid additional mandatory gates for mechanical changes or CLI/static-content tasks.",
+        "validation": "Behavioral scenarios across small library, UI app and mechanical migration; measure review utility/runtime impact before adopting numeric policies.",
+        "confidence": "high opportunity; not a claim every number is wrong"
+      },
+      {
+        "id": "O06",
+        "kind": "enhancement",
+        "file": "skills/security-and-hardening/references/hardening-patterns.md",
+        "line": 35,
+        "title": "Name production Express session-store and proxy prerequisites",
+        "evidence": "The session example uses default express-session store and secure cookies but supplies no production store/proxy guidance. The module's MemoryStore default is unsuitable for production/multiple processes; secure cookies behind a trusted TLS-terminating proxy require correct trust-proxy configuration. This excerpt may rely on application setup outside the snippet.",
+        "remedy": "Declare those prerequisites or add concise links to detected session framework docs; avoid a second full auth guide.",
+        "validation": "Two-instance session continuity and HTTPS-through-proxy cookie behavior using fake local components; verify pinned framework docs before implementation.",
+        "confidence": "medium; application prerequisites are unshown, not a demonstrated repository runtime failure"
+      }
+    ],
+    "overlapDecisions": [
+      "Keep interview-me (intent clarification), idea-refine (divergent/convergent options), doubt-driven-development (artifact challenge), spec (requirements) and planning (execution mechanics) distinct; their current phase separation is meaningful. Decide whether 'stress-test my plan' should prefer doubt over idea-refine automatically, since both descriptions claim it.",
+      "Use planning as the canonical task-sizing source, deprecation as the canonical migration-recovery source, and host setup docs as the canonical platform adapter source. Fix contradictory copies rather than adding a new catch-all workflow.",
+      "Decide packaging behavior for shared ../../references and references to sibling skills when only a subset is installed: optional fallback/link versus bundling shared resources. No broken-path claim is made for the complete checkout.",
+      "Decide runnable-example assurance level: extracted compiler/unit checks for self-contained snippets versus documented prerequisites for fragments. Favor a few behavioral regressions tied to failures C01–C06/C15–C16 over tests that mirror prose.",
+      "Decide whether paid autonomous/provider comparisons are ever part of default skill execution. Current reviewed workflows preserve the explicit-paid-comparison boundary; no provider calls were used here."
+    ],
+    "checksAndLimits": [
+      "All 39 assigned files fully read. Inventory compared with rg --files skills references: count39; 25 SKILL.md entries individually recorded in report ledger.",
+      "Network-free scratch Node probes reproduced C01, C02, C05, C06 and C20 using actual Git where relevant. Inputs contain clearly fake credentials only. Probe script and JSON results saved outside repository under work/whole-repo-audit.",
+      "Read-only primary-document retrieval via Context7 for React, Cursor, Playwright, PostgreSQL, GitHub Actions; web primary pages for Chrome bfcache, setup-node and HTML label association. No installs or paid/model/provider calls.",
+      "No whole application browser execution, database server execution, production deployment, account mutation or full slow repository suite. Those remain remedy-validation tasks after plan approval.",
+      "git status --short remained empty at end of content probing. Baseline commit unchanged. Scratch fixtures deliberately retained as reproducible evidence outside the repository.",
+      "Cross-check requested by root: no assigned skills/reference file claims Chrome DevTools MCP Lighthouse's performance category is available. Performance trace is advertised separately; constraint/performance guides use the actual Lighthouse CLI or regular DevTools UI. Leave these surfaces sound for the docs agent's grouped MCP-Lighthouse fix.",
+      "Excluded resolved PR1–5 defects: Git hard-reset safety, security prior authorization, TDD characterization handling, old object-to-Map/async rewrites, initial idempotency response-envelope fix, Zod trim, SameSite CSRF claim, old native modal pattern, tail-sampling guarantee, keyset/tie pagination, stable-props example, migration NOT NULL contraction, dependency-range detection, WCAG unit conversion, axe CLI, source-trust boundary, hook/cache/eval fixes. C07/C09/C10 are remaining inconsistent copies, explicitly distinguished from repaired examples."
+    ]
+  },
+  "runtime": {
+    "scope": {
+      "head": "22848dae4944572260933fda6a4f6d2912ec1fb4",
+      "tracked_files": 115,
+      "scripts": 20,
+      "hooks": 11,
+      "evals": 84,
+      "case_files": 25,
+      "behavioral_evals": 33,
+      "dialogue_evals": 5,
+      "ledger": "runtime-coverage.md",
+      "machine_ledger": "runtime-inventory.json",
+      "implementation_performed": false,
+      "provider_calls": 0,
+      "installs": 0
+    },
+    "free_verification": {
+      "node_tests": {
+        "total": 219,
+        "passed": 218,
+        "failed": 0,
+        "skipped": 1
+      },
+      "cache_python_tests": {
+        "total": 37,
+        "passed": 34,
+        "failed": 0,
+        "skipped": 3
+      },
+      "validators": "All five validators passed; 25 skills, 9 command groups, 14 artifact-path files checked.",
+      "deterministic_evals": {
+        "checks": 143,
+        "errors": 0,
+        "warnings": 0,
+        "rank1": 90,
+        "positives": 91
+      },
+      "prior_unchanged_simplify_verification": "Final pre-audit lifecycle verification: 117 passed, 0 failed; native symlink and temp-root alias branches skipped on Windows. A real Windows junction separately verified the default-temp alias correction. Not rerun during this whole-repo pass.",
+      "logs": [
+        "free-checks-summary.log",
+        "node-tests.log",
+        "cache-python-tests.log",
+        "deterministic-evals.log"
+      ],
+      "scratch_cleanup": "All reproduction and verification temporary trees were removed after checking their resolved paths remain under the audit scratch directory."
+    },
+    "findings": [
+      {
+        "id": "RT-B1",
+        "label": "bug",
+        "priority": "P2",
+        "confidence": "high",
+        "locations": [
+          "scripts/lib/skill-lint.js:181",
+          "scripts/lib/skill-lint.js:190",
+          "scripts/lib/skill-lint.js:256"
+        ],
+        "title": "Frontmatter parsing has false accepts and false rejects",
+        "trigger_evidence": "Valid top-level name alpha and description Use when handling alpha work, followed by metadata.name workflow-display-name and metadata.description Metadata description, are parsed with the child fields overwriting the top-level fields. The linter incorrectly reports name mismatch and missing trigger. Separately, description: \"Use when \"unescaped\" text\" returns no YAML errors; already-installed PyYAML 6.0.3 raises ParserError for identical text. No package was installed to reproduce this.",
+        "impact": "A legitimate metadata extension can be rejected, while malformed frontmatter can pass CI and fail host parsing.",
+        "solution_outline": "After dependency policy approval, use one semantic frontmatter reader for linting and description extraction, preserving top-level field scope. Alternatively declare and strictly validate a limited supported syntax; do not claim full YAML validity from quote-end heuristics.",
+        "free_validation": "Cases for nested metadata name/description, malformed embedded quotes, valid escaped quotes and quoted comments, valid maps, and current 25-skill frontmatter. Compare acceptance to the selected parser and preserve current routing vocabulary."
+      },
+      {
+        "id": "RT-B2",
+        "label": "bug",
+        "priority": "P2",
+        "confidence": "high",
+        "locations": [
+          "scripts/validate-commands.js:70",
+          "scripts/validate-commands.js:149"
+        ],
+        "title": "Command validator accepts broken TOML prompt bodies",
+        "trigger_evidence": "Matching Claude/TOML descriptions with TOML prompt = \"\"\" followed by an unterminated body pass validate-commands with exit 0 and 1 commands checked, 0 errors. Python 3.11 stdlib tomllib rejects the same text as Unterminated string. The code comment says a real TOML parser is used, but the implementation only regex-extracts description.",
+        "impact": "A broken command adapter can ship despite green command parity checks.",
+        "solution_outline": "Parse complete TOML documents before comparing semantic description values. Validate required prompt shape and keep intentional host-specific bodies distinct.",
+        "free_validation": "Malformed multiline prompts, duplicate keys, invalid escapes, and valid multiline/basic/literal strings in scratch twins; current 18 TOML command files must parse and retain equivalent descriptions."
+      },
+      {
+        "id": "RT-B3",
+        "label": "bug",
+        "priority": "P2",
+        "confidence": "high",
+        "locations": [
+          "scripts/run-evals.js:938",
+          "scripts/run-evals.js:974"
+        ],
+        "title": "Unknown CLI flags silently bypass requested routing controls",
+        "trigger_evidence": "At this HEAD, --min-rank1 100 exits 1 because only 90/91 positives rank first. The typo --min-rnak1 100 exits 0 and prints PASSED because unrecognized arguments are ignored. Source also treats a misspelled --dryrun as absent rather than rejecting it; with explicit models, that selects the live path. No live/provider call was made.",
+        "impact": "A typo can produce a false-green check; a misspelled preview flag can select paid execution unexpectedly.",
+        "solution_outline": "Use strict argument parsing or explicit validation of allowed flags, positional arguments, duplicate options, and values before any CLI invocation or result creation. Preserve documented commands.",
+        "free_validation": "Unknown-option and dry-run typo cases must fail with useful diagnostics and zero fake-CLI calls; valid deterministic/live/dry-run argv matrices retain current behavior."
+      },
+      {
+        "id": "RT-B4",
+        "label": "bug",
+        "priority": "P2",
+        "confidence": "high",
+        "locations": [
+          "scripts/run-evals.js:468",
+          "scripts/run-evals.js:472",
+          "scripts/run-evals.js:476"
+        ],
+        "title": "Nested explicit-file fixtures silently skip declared setup patches",
+        "trigger_evidence": "Materialize files[] = [project/src/app.js, project/.eval/working-tree.patch] with a valid patch changing the nested app from module.exports = 1 to 2. Materialization succeeds, app remains 1, .eval remains in the workspace, and Git status is clean: the patch was committed as baseline data. Setup discovery looks in src/.eval and .eval/.eval, never project/.eval. The existing directory-selected Git fixture still applies correctly; planted fixture logic itself is not the defect.",
+        "impact": "A documented file-selection form can grade an unpatched task and expose setup metadata to the executor while appearing successfully initialized.",
+        "solution_outline": "Identify copied setup patch paths directly, or define and validate an explicit fixture-root/setup contract. Apply each declared patch once and remove its setup directory before baseline evidence/execution.",
+        "free_validation": "Nested individual-file selection plus explicit setup patch must produce the expected dirty working tree, omit .eval, and match initial archived bytes. Retain the existing whole-directory fixture regression."
+      },
+      {
+        "id": "RT-B5",
+        "label": "bug",
+        "priority": "P2",
+        "confidence": "high",
+        "locations": [
+          "scripts/run-evals.js:797",
+          "scripts/run-evals.js:800",
+          "scripts/run-evals.js:824"
+        ],
+        "title": "Setup snapshot failures leave unjournaled partial run directories",
+        "trigger_evidence": "With valid skill/case/fixtures and a missing selected plugin manifest, a fake --version response is followed by snapshotPackage ENOENT. A timestamped results directory and partial package exist, but run.json does not. No executor/grader/provider call occurs. Journaling starts only after snapshotting/hashing, outside the per-eval failure handler.",
+        "impact": "The retained-evidence claim does not cover early setup failures; abandoned partial directories lack recorded configuration, phase, status, and error.",
+        "solution_outline": "Perform structural manifest preflight before creating a run, and journal any subsequent setup/snapshot failure from the moment the run directory is allocated. Preserve prior runs.",
+        "free_validation": "Missing/malformed manifest, copy/read/hash failure, and valid setup with fake CLI: no provider calls on preflight failures, and every allocated run directory has a failed structured record."
+      },
+      {
+        "id": "RT-B6",
+        "label": "bug",
+        "priority": "P3",
+        "confidence": "high",
+        "locations": [
+          "scripts/run-evals-test.js:76",
+          "scripts/lib/skill-lint-test.js:20"
+        ],
+        "title": "Two test fixture factories leak temporary directories",
+        "trigger_evidence": "Running one selected run-evals test leaves its agent-skills-run-evals-test directory. The full 219-test run, with TEMP/TMP/TMPDIR isolated under audit scratch, leaves 16 run-evals sandbox directories plus 7 skill-layout directories. Other suites use cleanup hooks or try/finally. Audit removed these controlled leftovers afterward.",
+        "impact": "Repeated local validation accumulates fixture copies and makes cleanup coverage incomplete.",
+        "solution_outline": "Register each sandbox with test-context cleanup or a suite cleanup collection, including assertion/setup failure paths.",
+        "free_validation": "Run the affected suites under an isolated temporary root and assert no generated fixture directories remain after success and forced failure."
+      },
+      {
+        "id": "RT-M1",
+        "label": "measurement",
+        "priority": "P2",
+        "confidence": "high",
+        "locations": [
+          "evals/cases/constraint-driven-development.json:44",
+          "evals/cases/constraint-driven-development.json:48",
+          "evals/cases/constraint-driven-development.json:74",
+          "scripts/run-evals.js:830",
+          "scripts/run-evals.js:851",
+          "scripts/run-evals.js:861"
+        ],
+        "title": "Single-turn dialogue execution cannot establish all declared dialogue outcomes",
+        "trigger_evidence": "All five dialogue evaluations submit one user prompt without scripted user replies or resumption. Constraint case 1 has no fixture yet expects repository inspection and completed explainable constraints; case 3 requires a verdict command recorded in CONSTRAINTS.md while the dialogue grader explicitly says not to require file edits/commands. Existing tests confirm fixtureless dialogue runs in an empty directory.",
+        "impact": "Scores can reflect invented context or prose completion rather than the actual multi-turn/file-producing workflow.",
+        "solution_outline": "First align existing cases to first-turn conversational outcomes or execution artifacts with real context. A scripted multi-turn harness is optional new capability and remains dependent on the user's pending Q6 decision.",
+        "free_validation": "Static case-kind/artifact consistency checks and fake transcripts distinguish first-turn questions from completed artifacts; optional turn scripting can be validated with fake backend responses before any separately authorized model run."
+      },
+      {
+        "id": "RT-M2",
+        "label": "measurement",
+        "priority": "P2",
+        "confidence": "high for fixture/prerequisite absence; native host behavior unmeasured",
+        "locations": [
+          "evals/cases/browser-testing-with-devtools.json:36",
+          "scripts/lib/eval-backends.js:6",
+          "scripts/run-evals.js:843",
+          "evals/fixtures/incremental-implementation/tasks/plan.md:5",
+          "evals/fixtures/frontend-ui-engineering/design-system.md:3"
+        ],
+        "title": "Some behavioral tasks lack executable scaffolds or declared backend prerequisites",
+        "trigger_evidence": "Browser evaluation requires real runtime browser evidence but browser/MCP dependencies are not provisioned or preflighted (explicitly admitted in eval README). Incremental implementation requires wiring an Export button to a reports page, but its three-file fixture only has a pure reports module, Node tests, and a plan. React dropdown fixture has Button.tsx and conventions, but no package/build/browser harness.",
+        "impact": "A failed run may measure missing host tools or invented scaffolding instead of the intended skill behavior; successful prose/file construction does not establish compile/runtime accessibility.",
+        "solution_outline": "Declare required capabilities and preflight them before spending tokens, recording unavailable prerequisites distinctly. Improve minimal fixtures for existing capabilities rather than add product features; choose catalogue depth after pending Q5.",
+        "free_validation": "Capability-matrix tests with fake backends, fixture startup/compile readiness checks where prerequisites exist, and explicit unavailable-prerequisite results. Do not run provider calls or install dependencies during this audit."
+      },
+      {
+        "id": "RT-M3",
+        "label": "measurement",
+        "priority": "P3",
+        "confidence": "high",
+        "locations": [
+          "evals/README.md:136"
+        ],
+        "title": "Documented checked-in routing baseline is stale",
+        "trigger_evidence": "README calls the checked-in baseline 100%; current deterministic run is 90/91 = 98.90%, printed as 99%. The existing 95% floor passes. This does not reopen the solved abbreviation correction.",
+        "impact": "Readers cannot accurately compare the stated baseline with current evidence.",
+        "solution_outline": "Report current measured counts or explicitly label historical numbers with their revision; optionally generate a small machine-readable metrics artifact from the existing runner.",
+        "free_validation": "Parse deterministic output or exported metrics and verify the documented baseline identifies the corresponding commit/counts; preserve the existing routing floor."
+      },
+      {
+        "id": "RT-E1",
+        "label": "enhancement",
+        "priority": "P2",
+        "confidence": "high",
+        "locations": [
+          "scripts/run-evals.js:554",
+          "scripts/run-evals.js:561"
+        ],
+        "title": "Bound archive traversal and manifest growth as well as file bytes",
+        "trigger_evidence": "snapshotWorkspace with byte limit 0 and 100 empty files retains all 100 manifest entries and reports complete=true. There is no entry-count, directory-depth, or collection-time budget. The existing file-byte limit is correctly enforced and is not being reopened as a solved defect.",
+        "impact": "Large dependency/build trees can consume significant collection time, directory operations, and manifest memory despite the 64 MiB file-byte cap.",
+        "solution_outline": "Add explicit bounded traversal/manifest policy with truthful incomplete/omission metadata; select practical budgets during planning rather than invent unsupported thresholds.",
+        "free_validation": "Small-budget empty-file and deep-directory trees stop within bounds, produce deterministic incomplete evidence, and preserve retained file hashes and existing byte-bound regressions."
+      },
+      {
+        "id": "RT-E2",
+        "label": "enhancement",
+        "priority": "P2",
+        "confidence": "high",
+        "locations": [
+          "scripts/run-evals.js:280",
+          "scripts/run-evals.js:733",
+          "scripts/lib/eval-backends.js:79"
+        ],
+        "title": "Unify case validation and strengthen malformed-evidence parity",
+        "trigger_evidence": "Tier 2 checks expected_output type but live validation does not; trigger prompt/top_k shape is not consistently validated, and null eval entries can reach property reads. Claude parsing accepts a success result followed by a synthetic unfinished assistant event, whereas Codex explicitly checks a later unfinished turn. The synthetic trace acceptance is proven; ordinary native Claude ordering was not measured.",
+        "impact": "Different entry points accept different case shapes, diagnostics can become stack traces, and backend completion hardening is uneven.",
+        "solution_outline": "One shared typed case validator with useful field diagnostics; define allowed terminal/post-terminal events per backend and reject incomplete evidence under that documented contract. Keep any live-ordering claim separate from unit evidence.",
+        "free_validation": "Malformed objects/arrays/nulls, empty required strings, invalid top_k, duplicate ids, and trailing unfinished fake events must fail consistently before fake provider calls. Current 25 cases remain valid."
+      },
+      {
+        "id": "RT-E3",
+        "label": "enhancement",
+        "priority": "P3",
+        "confidence": "high",
+        "locations": [
+          "hooks/simplify-ignore-test.sh:560",
+          "hooks/simplify-ignore-test.sh:566",
+          "scripts/validate-versions-test.js:9"
+        ],
+        "title": "Make free verification more portable and maintainable",
+        "trigger_evidence": "Tests span Node, Bash, and Python; simplify mode assertions directly use GNU stat -c, platform-sensitive real-link tests skip on this Windows account, and version validation tests duplicate version-reading logic rather than exercise validator failure behavior. A full scripted inventory already provides a basis for a single free check entry point and coverage summaries.",
+        "impact": "Contributors need several manually coordinated commands; platform skips and duplicated validator logic can hide maintenance drift.",
+        "solution_outline": "A contributor verification entry point can orchestrate existing free checks and explicit platform skips. Use a portable mode probe and test actual validator error cases. This extends existing verification, not the skill catalogue.",
+        "free_validation": "Run the same free command on supported CI operating systems with isolated temporary roots; report named skips and verify version mismatch/missing-manifest failures through the actual validator."
+      }
+    ],
+    "parser_policy_facts": {
+      "confirmed_local": "Node 24.19 has no builtin YAML or TOML parser. Python 3.11.9 supplies stdlib tomllib, but no stdlib YAML parser. Installed PyYAML 6.0.3 was used only as an existing local oracle; no installation occurred.",
+      "cross_runtime_stdlib_option": "Using tomllib would introduce Python 3.11 as a contributor-validator prerequisite; cache helpers currently support Python 3.8+. It cannot solve YAML semantics on its own.",
+      "pinned_js_devdependency_option": "Approved minimal pinned development parsers would introduce a package manifest, lockfile, and dependency installation for contributors/CI, while keeping validation in Node. Keep contributor dependencies distinct from installed skill runtime requirements and decide whether archived helpers need reproducible parser setup.",
+      "dependency_free_option": "A narrow validated syntax can remain dependency-free but must explicitly reject unsupported features and cannot accurately claim full YAML/TOML support without implementing those grammars."
+    },
+    "sound_areas_to_preserve": [
+      "PR4 vocabulary normalization and the existing 95% routing floor; do not game prompts or lower the floor.",
+      "PR4 corrected async/counting/instrumentation examples and their behavioral unit tests.",
+      "Completed PR2/PR3/PR5 evidence and runtime controls: full-package snapshots, explicit models, unique prior evidence preservation (PR2); Codex backend/native JSONL and Git maintenance (PR3); hermetic fixture Git setup, initial/final workspace artifact manifests, byte/leaf-identity checks, cleanup/status reconciliation, and native Windows executable argv policy (PR5).",
+      "PR5 opt-in hook registration, explicit session ownership, private recovery state, atomic replacements, NUL/ambiguity refusal, one-pass expansion, and honest native-WebFetch bypass.",
+      "PR5 static fixture ancestor/link/Git-metadata rejection before live snapshots or CLI calls.",
+      "Intentional task defects in the 48 fixture files; do not repair them as production bugs.",
+      "Three Claude plugin cases and six graders remain natural-routing measurements; no provider execution or claimed new live evidence in this audit."
+    ]
+  },
+  "documentation_configuration_report": "# Documentation, commands, personas, packaging and CI audit\n\nHEAD: 22848dae4944572260933fda6a4f6d2912ec1fb4. Static review: 64/64 assigned tracked files. No tracked translations. No implementation authorized or performed.\n\n## Confirmed findings\n\n### D01 (P1): host integration\n\nLocations: .claude/commands/ship.md:13; docs/agents.md:110; README.md:24; docs/getting-started.md:124. Confidence: High.\n\nEvidence / trigger: Claude's official plugin components and hooks documentation identifies plugin agents as <plugin>:<name> and plugin commands as /<plugin>:<command>. /ship expressly supplies bare subagent_type values such as code-reviewer, and the guides present bare short commands as installed-plugin entry points. A consumer without separately defined local agents/commands has only raiinman-agent-skills:... registrations.\n\nImpact: Native plugin users can fail to resolve the intended review personas or invoke the short lifecycle wrappers. Bare custom agents may also be selected instead of the reviewed plugin persona.\n\nRemedy: Document native plugin namespaces and distinguish local-clone project commands. Resolve an explicitly configured local override when intended; otherwise pass the plugin-scoped agent identifier.\n\nMeaningful verification: Inspect command/agent discovery in an isolated Claude installation using the exact checkout, without a provider call if catalog inspection is supported. Assert dispatch identifiers match discovered plugin agents; keep paid behavior testing separate.\n\nUser decision: Which inherited hosts remain supported, and whether implicit local persona overrides should remain a feature.\n\nSources: [primary source](https://code.claude.com/docs/en/plugins/components), [primary source](https://code.claude.com/docs/en/hooks)\n\n### D02 (P1): review contract\n\nLocations: .claude/commands/review.md:15; .claude/commands/ship.md:32; .gemini/commands/review.toml:14; .gemini/commands/ship.toml:31; commands/review.toml:14; commands/ship.toml:31; agents/code-reviewer.md:53. Confidence: High.\n\nEvidence / trigger: The code-reviewer persona defines Required as must-address-before-merge, while /review requests Critical/Important/Suggestion and /ship explicitly aggregates Critical/Important. Required findings have no declared mapping into ship blockers.\n\nImpact: A review containing only Required findings can be omitted or demoted during merge, permitting a GO decision that contradicts the review contract.\n\nRemedy: Use one canonical severity vocabulary and an explicit merge mapping. Treat unresolved Required findings as blockers unless a permitted deferral is explicitly accepted and recorded.\n\nMeaningful verification: Test synthesis using a synthetic report with one Required finding and no Critical findings, including explicit accepted deferral. Validate all three command surfaces use the same mapping; model behavior would require separately authorized evaluation.\n\nUser decision: Whether the canonical labels remain Critical/Required/Optional/Nit or another explicitly mapped scheme.\n\n### D03 (P1): invalid runnable example\n\nLocations: docs/advanced-per-agent-configuration.md:47. Confidence: High.\n\nEvidence / trigger: The Gemini agent example omits required name and description, adds thinking_level, and selects grep rather than grep_search. Current official agentLoader.ts has a strict schema requiring name/description and no thinking_level field; official examples use grep_search.\n\nImpact: Copying the documented example can prevent agent loading. Direct Gemini API generation options have been conflated with the CLI agent-file schema.\n\nRemedy: Use a complete schema-supported example, prefer model inheritance or a verified model identifier, and distinguish API thinking configuration from supported CLI frontmatter. Do not assume Antigravity shares Gemini's entire schema.\n\nMeaningful verification: Parse the example against the current official local-agent schema or run free local agent catalog validation after explicit install authorization; verify requested tools actually resolve.\n\nUser decision: Whether Gemini/Antigravity advanced adapters are maintained or clearly labeled as unverified optional recipes.\n\nSources: [primary source](https://github.com/google-gemini/gemini-cli/blob/main/packages/core/src/agents/agentLoader.ts), [primary source](https://github.com/google-gemini/gemini-cli/blob/main/docs/core/subagents.md)\n\n### D04 (P2): configuration documentation\n\nLocations: docs/gemini-cli-setup.md:90. Confidence: High.\n\nEvidence / trigger: The guide puts MCP configuration in ~/.gemini/config.json. Official Gemini CLI documentation configures MCP servers and hooks in ~/.gemini/settings.json.\n\nImpact: Users edit a file the documented host does not load and see missing tools.\n\nRemedy: Use settings.json with a minimal supported example and separate user/workspace scopes.\n\nMeaningful verification: Check configuration discovery with a harmless local MCP configuration after approval, or add an offline documentation assertion tied to the officially documented path.\n\nUser decision: None beyond maintaining this inherited guide.\n\nSources: [primary source](https://github.com/google-gemini/gemini-cli/blob/main/docs/tools/mcp-server.md)\n\n### D05 (P2): instruction scope\n\nLocations: docs/antigravity-setup.md:110; AGENTS.md:5; CONTRIBUTING.md:87. Confidence: High.\n\nEvidence / trigger: Antigravity setup still says to copy or link AGENTS.md into the consuming workspace, while the repository explicitly says its root instruction files configure this fork only and must not be copied.\n\nImpact: Consumers import fork-specific contribution, orchestration, Git, and repository assumptions into unrelated projects, potentially overwriting their own instructions.\n\nRemedy: Provide a short consumer-owned template or routing pointer that carries accepted authorization and proportional checks; do not copy the repository instruction file.\n\nMeaningful verification: Add a documentation check for prohibited root-instruction copy guidance and inspect the replacement template for repository-specific paths and policies.\n\nUser decision: Whether to provide one generated host-neutral consumer template or separate host templates.\n\n### D06 (P2): setup data preservation\n\nLocations: docs/gemini-cli-setup.md:45; docs/windsurf-setup.md:11. Confidence: High.\n\nEvidence / trigger: Both documented setup recipes use cat ... > GEMINI.md/.windsurfrules without checking existing content. The guides describe adding persistent project context and apply to existing projects.\n\nImpact: Following setup can discard existing project conventions, security policies, and user instructions.\n\nRemedy: Create a separate imported file or refuse overwrite and present a scoped merge. Avoid pasting entire workflows when native skill loading is available.\n\nMeaningful verification: Exercise the copy recipe in a temporary consumer project with an existing sentinel instruction file; its bytes must survive. No host or model call is necessary.\n\nUser decision: Preferred import/managed-section strategy for consumers with existing rules.\n\n### D07 (P2): portability/documentation\n\nLocations: README.md:80; docs/getting-started.md:167; docs/skill-anatomy.md:147; CONTRIBUTING.md:65; docs/developer-onboarding.md:88. Confidence: High.\n\nEvidence / trigger: The sparse-install workaround copies shared references inside the installed skill, but actual links such as ../../references/testing-patterns.md resolve to the host-level sibling references directory, not <skill>/references. Contributor docs also ban reference material inside skills while anatomy permits skill-owned references, and anatomy prescribes repo-relative helper paths that conflict with the corrected installed-root guidance.\n\nImpact: The suggested workaround leaves links broken; new skills can repeat helper-path portability defects and contributors receive contradictory packaging instructions. The general sparse-install gap is already acknowledged in #361; this finding concerns the incorrect workaround and inconsistent authoring contract.\n\nRemedy: State the correct sibling layout or explicitly rewrite links for a self-contained distribution. Distinguish shared pack references from skill-owned resources and require helpers to resolve from the installed skill root.\n\nMeaningful verification: Build a temporary sparse installation from actual tracked resources and resolve every file/helper reference there. Check both full-pack and sparse layouts without invoking a model.\n\nUser decision: Keep full-pack distribution as the supported contract, or add generated self-contained skill bundles with one source of truth.\n\nSources: [primary source](https://github.com/addyosmani/agent-skills/issues/361)\n\n### D08 (P1): CI verification\n\nLocations: .github/workflows/test-plugin-install.yml:173; .github/workflows/test-plugin-install.yml:179; .claude-plugin/marketplace.json:13. Confidence: High.\n\nEvidence / trigger: CI adds the checkout as a marketplace, but that marketplace's plugin source is GitHub raiinman/agent-skills with no PR ref/SHA. The install step consequently fetches the declared remote source rather than asserting it loaded the tested checkout.\n\nImpact: A PR can pass installation against the remote default branch while its own installation is broken. On a new fork/private source this also creates avoidable remote availability dependence.\n\nRemedy: Test a temporary local-source marketplace pointed at the checkout, or another native local installation path. Assert installed plugin version/content/commit equals the checkout; keep remote-marketplace smoke coverage separate.\n\nMeaningful verification: Make a sentinel manifest/content change in a temporary checkout and verify installed metadata contains it. A local plugin install need not invoke a model, but current user instructions prohibit installs until approval.\n\nUser decision: Whether CI should validate only the supported Codex path, preserve Claude compatibility, and separately test remote marketplace distribution.\n\nSources: [primary source](https://code.claude.com/docs/en/plugin-marketplaces)\n\n### D09 (P2): host guide modernization\n\nLocations: docs/windsurf-setup.md:7; docs/windsurf-setup.md:29; README.md:157. Confidence: High.\n\nEvidence / trigger: The guide concatenates three complete skills totaling 48,597 characters into one legacy rules file and recommends pasting full skills globally. Current official docs support native skills; workspace rules have a 12,000-character per-file limit and global rules a 6,000-character limit. Windsurf docs now redirect to Devin Desktop, retaining legacy paths as fallbacks.\n\nImpact: The recommended configuration exceeds documented rule limits and defeats progressive loading. Users may lose later workflow instructions or carry excessive always-on context.\n\nRemedy: Use native skill folders and short policies, preserving shared reference layout; identify modern and legacy host/path names with a dated support note.\n\nMeaningful verification: Measure generated rule lengths and inspect discovery in a clean supported host after approval. Confirm all copied skill resources resolve offline first.\n\nUser decision: Whether Windsurf/Devin Desktop remains a maintained host or is moved to a short unverified entry.\n\nSources: [primary source](https://docs.devin.ai/desktop/cascade/skills), [primary source](https://docs.devin.ai/desktop/cascade/memories)\n\n### D10 (P2): current tooling contract\n\nLocations: .claude/commands/webperf.md:10; .gemini/commands/webperf.toml:9; commands/webperf.toml:9; agents/web-performance-auditor.md:20. Confidence: High.\n\nEvidence / trigger: Current upstream ChromeDevTools MCP lighthouse.ts expressly excludes performance; onlyCategories contains accessibility, seo, best-practices, and agentic-browsing. The command/persona present chrome-devtools lighthouse_audit output as a Lighthouse performance artifact source. That tool's output is summary/report paths rather than a raw performance Lighthouse result.\n\nImpact: The suggested capture cannot produce the requested performance score/CWV evidence, and treating its JSON as a raw Lighthouse performance result is a schema mismatch. The metric-honesty rule mitigates fabrication but does not repair capture instructions.\n\nRemedy: Distinguish standalone Lighthouse performance reports from MCP's non-performance Lighthouse audit and use performance_* traces for MCP performance evidence. Document actual artifact envelopes/report paths and required CLI page selection for the supported version.\n\nMeaningful verification: Use saved genuine tool envelopes and standalone Lighthouse fixtures to check parsing/capability detection, with missing fields remaining unmeasured; a free browser capture can be authorized later.\n\nUser decision: Pin supported ChromeDevTools MCP capabilities/version or detect them from tool schemas at runtime.\n\nSources: [primary source](https://raw.githubusercontent.com/ChromeDevTools/chrome-devtools-mcp/main/src/tools/lighthouse.ts), [primary source](https://github.com/ChromeDevTools/chrome-devtools-mcp/blob/main/docs/cli.md)\n\n### D11 (P2): security/performance guidance\n\nLocations: agents/web-performance-auditor.md:91. Confidence: High.\n\nEvidence / trigger: The persona requires no Cache-Control:no-store on HTML for bfcache. Chrome's official guidance documents eligibility for safely handled no-store pages since the 2025 rollout and says no-store remains appropriate for sensitive pages.\n\nImpact: The blanket recommendation can remove a valid sensitive-response cache policy for a performance benefit that is no longer universally required.\n\nRemedy: Measure bfcache eligibility/reasons for the supported browsers and preserve security-driven no-store policies. Distinguish HTTP caching from bfcache.\n\nMeaningful verification: Test back/forward navigation on a sensitive no-store page and inspect not-restored reasons under declared browser versions; assert remediation preserves the security header.\n\nUser decision: Supported browser matrix and security requirements for the audited product; not a universal pack threshold.\n\nSources: [primary source](https://developer.chrome.com/docs/web-platform/bfcache-ccns)\n\n### D12 (P2): OpenCode integration\n\nLocations: AGENTS.md:36; .opencode/skills:1; docs/opencode-setup.md:19. Confidence: High for false claim and checked-out file shape; platform coverage remains unverified.\n\nEvidence / trigger: AGENTS.md says OpenCode does not support slash commands, while the guide and current official docs support project .opencode/commands. The tracked .opencode/skills is a mode-120000 symlink, but on this Windows checkout it is an ordinary file containing ../skills/, not a discovery directory. The guide's early copy instruction also precedes its later caveat that no command files exist in the repository.\n\nImpact: Repository contributors using OpenCode on default Windows Git checkouts can have no discovered skill directory, and readers are given conflicting command availability/setup guidance.\n\nRemedy: State that optional commands are supported but not shipped here; remove the non-runnable copy step and offer a Windows-safe discovery adapter or clearly document the symlink requirement.\n\nMeaningful verification: Inspect OpenCode's discovered skill catalog on Unix and a Windows checkout with core.symlinks=false; validate the documented command setup against tracked files.\n\nUser decision: Whether OpenCode source-checkout convenience is supported, and whether to ship generated command adapters or only documented examples.\n\nSources: [primary source](https://github.com/anomalyco/opencode/blob/dev/packages/web/src/content/docs/commands.mdx)\n\n## Concrete maintenance opportunities\n\n### M01\n\nLocations: docs/developer-onboarding.md:39; docs/developer-onboarding.md:48; README.md:378; CLAUDE.md:17; .github/ISSUE_TEMPLATE/skill-gap.yml:15. Confidence: High.\n\nOnboarding says Node20 is what CI runs, but CI uses24 and also requires Python; its 'everything CI runs' command list omits current validators/tests. README script count13 no longer matches tracked scripts, CLAUDE phase/command lists omit constraints, and the issue dropdown omits constraint-driven-development.\n\nRemedy: Generate or validate small catalog/runtime/check inventories from tracked source and CI; preserve concise onboarding while linking a complete free verification command.\n\nVerification: Compare dropdown skill choices and doc counts against the catalog and workflow; enforce the selected minimum Node/Python versions in a declared matrix.\n\nDecision: Minimum supported runtimes and whether generated inventory is worth maintaining.\n\n### M02\n\nLocations: .github/workflows/test-plugin-install.yml:154; .github/workflows/test-plugin-install.yml:167; .github/workflows/test-plugin-install.yml:148. Confidence: High about unpinned dependency and dependency graph; branch-protection impact conditional.\n\nBoth CI plugin jobs install the latest Claude package without a pinned version; final plugin validation depends on three validation jobs but not test-hooks. This gives changing external CLI behavior an uncontrolled input and allows install smoke work to proceed while hook checks fail.\n\nRemedy: Pin an explicitly maintained compatibility version and update deliberately; decide the aggregate required-check contract and include hook tests if aggregate validation is the release gate. Consider least-privilege workflow permissions and checkout credential settings.\n\nVerification: Record actual CLI version in CI and reproduce manifest checks with that version; inspect required branch-protection contexts before changing job dependencies.\n\nDecision: Pinning/update policy, network install policy, and which CI statuses must gate merge/release.\n\n### M03\n\nLocations: docs/opencode-setup.md:102; docs/copilot-setup.md:60; docs/gemini-cli-setup.md:60; docs/advanced-per-agent-configuration.md:10; docs/comparison.md:22. Confidence: High for local policy differences; host runtime effects unverified.\n\nInherited consumer templates retain 'even a small chance' mandatory workflows, npm-test-after-every-change and ask-first defaults, and always-loaded full skills, while the fork's supported policy uses proportional work and preserved authorization. Comparison is explicitly inherited but detailed current competitive/host claims remain undated.\n\nRemedy: Create a support matrix with dates/evidence, separate fork policy from upstream comparisons, and reuse one scoped consumer policy template rather than maintaining contradicting copies. Do not silently broaden native-host claims.\n\nVerification: Audit generated templates against the canonical fork policy and run static link/path/configuration checks. Native host and comparative behavioral verification stays separate and requires authorization.\n\nDecision: How much inherited host documentation to maintain versus prune; whether to retain detailed competitor comparisons.\n\n## Coverage accounting\n\nThe JSON ledger names all 64 tracked assigned files with an explicit reviewed verdict and finding IDs. Exact source files were read; byte-identical Antigravity/Gemini adapters were also compared. The MIT license and Windows materialization of the tracked OpenCode symlink were inspected. No translation files exist in the tracked inventory.\n\n## Further review / limitations\n\n- .claude/commands/ship.md, docs/agents.md, README.md, docs/getting-started.md, .claude-plugin/plugin.json, .claude-plugin/marketplace.json: Native isolated Claude catalog/namespace and exact-checkout install inspection; no install or model invocation performed.\n- docs/advanced-per-agent-configuration.md, .gemini/commands/ship.toml, docs/gemini-cli-setup.md: Native Gemini schema/catalog and adapter discovery validation; current docs/source checked, native runtime not exercised.\n- docs/antigravity-setup.md, commands/ship.toml, commands/webperf.toml: Supported Antigravity release and legacy-command importer behavior not natively verified.\n- docs/copilot-setup.md, docs/copilot-cli-setup.md, docs/commandcode-setup.md, docs/cursor-setup.md, docs/windsurf-setup.md, docs/other-hosts.md: Native host discovery, prompt/persona invocation, and installation resource retention not exercised. Command Code add/list/remove and Cursor discovery were documentation-verified; Oh My Pi remains an unverified one-line integration.\n- docs/comparison.md, docs/skill-anatomy.md: External competitor comparison and linked WikiSkill paper claims were read as inherited explanatory material, not independently research-validated.\n- .agents/plugins/marketplace.json, .codex-plugin/plugin.json, plugin.json, docs/codex-setup.md: Current official Codex schema/install documentation checked; native installation/discovery and paid behavior remain unperformed. Distinguish CLI $ mentions from desktop @ mentions in future guide revision.\n\nStatic coverage is complete; native runtime checks and explicitly listed external research validation remain incomplete. Host docs were checked through Context7 first, with authoritative web documentation fallback. No provider/model calls, installs, commits, or repository writes occurred. Scratch artifacts are outside the checkout.\n\n",
+  "documentation_configuration_coverage": {
+    "head": "22848dae4944572260933fda6a4f6d2912ec1fb4",
+    "date": "2026-10-08",
+    "scope": "docs, command surfaces, personas, manifests/marketplaces, root instructions/packaging/config, .github",
+    "tracked_assigned": 64,
+    "reviewed": 64,
+    "not_applicable": [],
+    "translations": {
+      "tracked_files": 0,
+      "verdict": "not applicable",
+      "reason": "No tracked translations; CONTRIBUTING explicitly excludes translations."
+    },
+    "entries": [
+      {
+        "file": ".agents/plugins/marketplace.json",
+        "verdict": "reviewed",
+        "review_kind": "static content and cross-surface contract review",
+        "findings": []
+      },
+      {
+        "file": ".claude-plugin/marketplace.json",
+        "verdict": "reviewed",
+        "review_kind": "static content and cross-surface contract review",
+        "findings": [
+          "D08"
+        ]
+      },
+      {
+        "file": ".claude-plugin/plugin.json",
+        "verdict": "reviewed",
+        "review_kind": "static content and cross-surface contract review",
+        "findings": []
+      },
+      {
+        "file": ".claude/commands/build.md",
+        "verdict": "reviewed",
+        "review_kind": "static content and cross-surface contract review",
+        "findings": []
+      },
+      {
+        "file": ".claude/commands/code-simplify.md",
+        "verdict": "reviewed",
+        "review_kind": "static content and cross-surface contract review",
+        "findings": []
+      },
+      {
+        "file": ".claude/commands/constraints.md",
+        "verdict": "reviewed",
+        "review_kind": "static content and cross-surface contract review",
+        "findings": []
+      },
+      {
+        "file": ".claude/commands/plan.md",
+        "verdict": "reviewed",
+        "review_kind": "static content and cross-surface contract review",
+        "findings": []
+      },
+      {
+        "file": ".claude/commands/review.md",
+        "verdict": "reviewed",
+        "review_kind": "static content and cross-surface contract review",
+        "findings": [
+          "D02"
+        ]
+      },
+      {
+        "file": ".claude/commands/ship.md",
+        "verdict": "reviewed",
+        "review_kind": "static content and cross-surface contract review",
+        "findings": [
+          "D01",
+          "D02"
+        ]
+      },
+      {
+        "file": ".claude/commands/spec.md",
+        "verdict": "reviewed",
+        "review_kind": "static content and cross-surface contract review",
+        "findings": []
+      },
+      {
+        "file": ".claude/commands/test.md",
+        "verdict": "reviewed",
+        "review_kind": "static content and cross-surface contract review",
+        "findings": []
+      },
+      {
+        "file": ".claude/commands/webperf.md",
+        "verdict": "reviewed",
+        "review_kind": "static content and cross-surface contract review",
+        "findings": [
+          "D10"
+        ]
+      },
+      {
+        "file": ".claude/rules/skills-contributing.md",
+        "verdict": "reviewed",
+        "review_kind": "static content and cross-surface contract review",
+        "findings": []
+      },
+      {
+        "file": ".codex-plugin/plugin.json",
+        "verdict": "reviewed",
+        "review_kind": "static content and cross-surface contract review",
+        "findings": []
+      },
+      {
+        "file": ".gemini/commands/build.toml",
+        "verdict": "reviewed",
+        "review_kind": "static content and cross-surface contract review",
+        "findings": []
+      },
+      {
+        "file": ".gemini/commands/code-simplify.toml",
+        "verdict": "reviewed",
+        "review_kind": "static content and cross-surface contract review",
+        "findings": []
+      },
+      {
+        "file": ".gemini/commands/constraints.toml",
+        "verdict": "reviewed",
+        "review_kind": "static content and cross-surface contract review",
+        "findings": []
+      },
+      {
+        "file": ".gemini/commands/planning.toml",
+        "verdict": "reviewed",
+        "review_kind": "static content and cross-surface contract review",
+        "findings": []
+      },
+      {
+        "file": ".gemini/commands/review.toml",
+        "verdict": "reviewed",
+        "review_kind": "static content and cross-surface contract review",
+        "findings": [
+          "D02"
+        ]
+      },
+      {
+        "file": ".gemini/commands/ship.toml",
+        "verdict": "reviewed",
+        "review_kind": "static content and cross-surface contract review",
+        "findings": [
+          "D02"
+        ]
+      },
+      {
+        "file": ".gemini/commands/spec.toml",
+        "verdict": "reviewed",
+        "review_kind": "static content and cross-surface contract review",
+        "findings": []
+      },
+      {
+        "file": ".gemini/commands/test.toml",
+        "verdict": "reviewed",
+        "review_kind": "static content and cross-surface contract review",
+        "findings": []
+      },
+      {
+        "file": ".gemini/commands/webperf.toml",
+        "verdict": "reviewed",
+        "review_kind": "static content and cross-surface contract review",
+        "findings": [
+          "D10"
+        ]
+      },
+      {
+        "file": ".gitattributes",
+        "verdict": "reviewed",
+        "review_kind": "static content and cross-surface contract review",
+        "findings": []
+      },
+      {
+        "file": ".github/ISSUE_TEMPLATE/skill-gap.yml",
+        "verdict": "reviewed",
+        "review_kind": "static content and cross-surface contract review",
+        "findings": [
+          "M01"
+        ]
+      },
+      {
+        "file": ".github/workflows/test-plugin-install.yml",
+        "verdict": "reviewed",
+        "review_kind": "static content and cross-surface contract review",
+        "findings": [
+          "D08",
+          "M02"
+        ]
+      },
+      {
+        "file": ".gitignore",
+        "verdict": "reviewed",
+        "review_kind": "static content and cross-surface contract review",
+        "findings": []
+      },
+      {
+        "file": ".opencode/skills",
+        "verdict": "reviewed",
+        "review_kind": "tracked symlink target and actual Windows checkout shape",
+        "findings": [
+          "D12"
+        ]
+      },
+      {
+        "file": "AGENTS.md",
+        "verdict": "reviewed",
+        "review_kind": "static content and cross-surface contract review",
+        "findings": [
+          "D05",
+          "D12"
+        ]
+      },
+      {
+        "file": "CLAUDE.md",
+        "verdict": "reviewed",
+        "review_kind": "static content and cross-surface contract review",
+        "findings": [
+          "M01"
+        ]
+      },
+      {
+        "file": "CONTRIBUTING.md",
+        "verdict": "reviewed",
+        "review_kind": "static content and cross-surface contract review",
+        "findings": [
+          "D05",
+          "D07"
+        ]
+      },
+      {
+        "file": "LICENSE",
+        "verdict": "reviewed",
+        "review_kind": "MIT attribution/license review",
+        "findings": []
+      },
+      {
+        "file": "README.md",
+        "verdict": "reviewed",
+        "review_kind": "static content and cross-surface contract review",
+        "findings": [
+          "D01",
+          "D07",
+          "D09",
+          "M01"
+        ]
+      },
+      {
+        "file": "agents/code-reviewer.md",
+        "verdict": "reviewed",
+        "review_kind": "static content and cross-surface contract review",
+        "findings": [
+          "D02"
+        ]
+      },
+      {
+        "file": "agents/security-auditor.md",
+        "verdict": "reviewed",
+        "review_kind": "static content and cross-surface contract review",
+        "findings": []
+      },
+      {
+        "file": "agents/test-engineer.md",
+        "verdict": "reviewed",
+        "review_kind": "static content and cross-surface contract review",
+        "findings": []
+      },
+      {
+        "file": "agents/web-performance-auditor.md",
+        "verdict": "reviewed",
+        "review_kind": "static content and cross-surface contract review",
+        "findings": [
+          "D10",
+          "D11"
+        ]
+      },
+      {
+        "file": "commands/build.toml",
+        "verdict": "reviewed",
+        "review_kind": "static content and cross-surface contract review",
+        "findings": []
+      },
+      {
+        "file": "commands/code-simplify.toml",
+        "verdict": "reviewed",
+        "review_kind": "static content and cross-surface contract review",
+        "findings": []
+      },
+      {
+        "file": "commands/constraints.toml",
+        "verdict": "reviewed",
+        "review_kind": "static content and cross-surface contract review",
+        "findings": []
+      },
+      {
+        "file": "commands/planning.toml",
+        "verdict": "reviewed",
+        "review_kind": "static content and cross-surface contract review",
+        "findings": []
+      },
+      {
+        "file": "commands/review.toml",
+        "verdict": "reviewed",
+        "review_kind": "static content and cross-surface contract review",
+        "findings": [
+          "D02"
+        ]
+      },
+      {
+        "file": "commands/ship.toml",
+        "verdict": "reviewed",
+        "review_kind": "static content and cross-surface contract review",
+        "findings": [
+          "D02"
+        ]
+      },
+      {
+        "file": "commands/spec.toml",
+        "verdict": "reviewed",
+        "review_kind": "static content and cross-surface contract review",
+        "findings": []
+      },
+      {
+        "file": "commands/test.toml",
+        "verdict": "reviewed",
+        "review_kind": "static content and cross-surface contract review",
+        "findings": []
+      },
+      {
+        "file": "commands/webperf.toml",
+        "verdict": "reviewed",
+        "review_kind": "static content and cross-surface contract review",
+        "findings": [
+          "D10"
+        ]
+      },
+      {
+        "file": "docs/adoption-guide.md",
+        "verdict": "reviewed",
+        "review_kind": "static content and cross-surface contract review",
+        "findings": []
+      },
+      {
+        "file": "docs/advanced-per-agent-configuration.md",
+        "verdict": "reviewed",
+        "review_kind": "static content and cross-surface contract review",
+        "findings": [
+          "D03",
+          "M03"
+        ]
+      },
+      {
+        "file": "docs/agents.md",
+        "verdict": "reviewed",
+        "review_kind": "static content and cross-surface contract review",
+        "findings": [
+          "D01"
+        ]
+      },
+      {
+        "file": "docs/antigravity-setup.md",
+        "verdict": "reviewed",
+        "review_kind": "static content and cross-surface contract review",
+        "findings": [
+          "D05"
+        ]
+      },
+      {
+        "file": "docs/codex-setup.md",
+        "verdict": "reviewed",
+        "review_kind": "static content and cross-surface contract review",
+        "findings": []
+      },
+      {
+        "file": "docs/commandcode-setup.md",
+        "verdict": "reviewed",
+        "review_kind": "static content and cross-surface contract review",
+        "findings": []
+      },
+      {
+        "file": "docs/comparison.md",
+        "verdict": "reviewed",
+        "review_kind": "static content and cross-surface contract review",
+        "findings": [
+          "M03"
+        ]
+      },
+      {
+        "file": "docs/copilot-cli-setup.md",
+        "verdict": "reviewed",
+        "review_kind": "static content and cross-surface contract review",
+        "findings": []
+      },
+      {
+        "file": "docs/copilot-setup.md",
+        "verdict": "reviewed",
+        "review_kind": "static content and cross-surface contract review",
+        "findings": [
+          "M03"
+        ]
+      },
+      {
+        "file": "docs/cursor-setup.md",
+        "verdict": "reviewed",
+        "review_kind": "static content and cross-surface contract review",
+        "findings": []
+      },
+      {
+        "file": "docs/developer-onboarding.md",
+        "verdict": "reviewed",
+        "review_kind": "static content and cross-surface contract review",
+        "findings": [
+          "D07",
+          "M01"
+        ]
+      },
+      {
+        "file": "docs/gemini-cli-setup.md",
+        "verdict": "reviewed",
+        "review_kind": "static content and cross-surface contract review",
+        "findings": [
+          "D04",
+          "D06",
+          "M03"
+        ]
+      },
+      {
+        "file": "docs/getting-started.md",
+        "verdict": "reviewed",
+        "review_kind": "static content and cross-surface contract review",
+        "findings": [
+          "D01",
+          "D07"
+        ]
+      },
+      {
+        "file": "docs/opencode-setup.md",
+        "verdict": "reviewed",
+        "review_kind": "static content and cross-surface contract review",
+        "findings": [
+          "D12",
+          "M03"
+        ]
+      },
+      {
+        "file": "docs/other-hosts.md",
+        "verdict": "reviewed",
+        "review_kind": "static content and cross-surface contract review",
+        "findings": []
+      },
+      {
+        "file": "docs/skill-anatomy.md",
+        "verdict": "reviewed",
+        "review_kind": "static content and cross-surface contract review",
+        "findings": [
+          "D07"
+        ]
+      },
+      {
+        "file": "docs/windsurf-setup.md",
+        "verdict": "reviewed",
+        "review_kind": "static content and cross-surface contract review",
+        "findings": [
+          "D06",
+          "D09"
+        ]
+      },
+      {
+        "file": "plugin.json",
+        "verdict": "reviewed",
+        "review_kind": "static content and cross-surface contract review",
+        "findings": []
+      }
+    ],
+    "further_review": [
+      {
+        "files": [
+          ".claude/commands/ship.md",
+          "docs/agents.md",
+          "README.md",
+          "docs/getting-started.md",
+          ".claude-plugin/plugin.json",
+          ".claude-plugin/marketplace.json"
+        ],
+        "need": "Native isolated Claude catalog/namespace and exact-checkout install inspection; no install or model invocation performed."
+      },
+      {
+        "files": [
+          "docs/advanced-per-agent-configuration.md",
+          ".gemini/commands/ship.toml",
+          "docs/gemini-cli-setup.md"
+        ],
+        "need": "Native Gemini schema/catalog and adapter discovery validation; current docs/source checked, native runtime not exercised."
+      },
+      {
+        "files": [
+          "docs/antigravity-setup.md",
+          "commands/ship.toml",
+          "commands/webperf.toml"
+        ],
+        "need": "Supported Antigravity release and legacy-command importer behavior not natively verified."
+      },
+      {
+        "files": [
+          "docs/copilot-setup.md",
+          "docs/copilot-cli-setup.md",
+          "docs/commandcode-setup.md",
+          "docs/cursor-setup.md",
+          "docs/windsurf-setup.md",
+          "docs/other-hosts.md"
+        ],
+        "need": "Native host discovery, prompt/persona invocation, and installation resource retention not exercised. Command Code add/list/remove and Cursor discovery were documentation-verified; Oh My Pi remains an unverified one-line integration."
+      },
+      {
+        "files": [
+          "docs/comparison.md",
+          "docs/skill-anatomy.md"
+        ],
+        "need": "External competitor comparison and linked WikiSkill paper claims were read as inherited explanatory material, not independently research-validated."
+      },
+      {
+        "files": [
+          ".agents/plugins/marketplace.json",
+          ".codex-plugin/plugin.json",
+          "plugin.json",
+          "docs/codex-setup.md"
+        ],
+        "need": "Current official Codex schema/install documentation checked; native installation/discovery and paid behavior remain unperformed. Distinguish CLI $ mentions from desktop @ mentions in future guide revision."
+      }
+    ],
+    "findings": [
+      {
+        "id": "D01",
+        "priority": "P1",
+        "category": "host integration",
+        "locations": [
+          ".claude/commands/ship.md:13",
+          "docs/agents.md:110",
+          "README.md:24",
+          "docs/getting-started.md:124"
+        ],
+        "confidence": "High",
+        "evidence": "Claude's official plugin components and hooks documentation identifies plugin agents as <plugin>:<name> and plugin commands as /<plugin>:<command>. /ship expressly supplies bare subagent_type values such as code-reviewer, and the guides present bare short commands as installed-plugin entry points. A consumer without separately defined local agents/commands has only raiinman-agent-skills:... registrations.",
+        "impact": "Native plugin users can fail to resolve the intended review personas or invoke the short lifecycle wrappers. Bare custom agents may also be selected instead of the reviewed plugin persona.",
+        "remedy": "Document native plugin namespaces and distinguish local-clone project commands. Resolve an explicitly configured local override when intended; otherwise pass the plugin-scoped agent identifier.",
+        "verification": "Inspect command/agent discovery in an isolated Claude installation using the exact checkout, without a provider call if catalog inspection is supported. Assert dispatch identifiers match discovered plugin agents; keep paid behavior testing separate.",
+        "user_decision": "Which inherited hosts remain supported, and whether implicit local persona overrides should remain a feature.",
+        "sources": [
+          "https://code.claude.com/docs/en/plugins/components",
+          "https://code.claude.com/docs/en/hooks"
+        ]
+      },
+      {
+        "id": "D02",
+        "priority": "P1",
+        "category": "review contract",
+        "locations": [
+          ".claude/commands/review.md:15",
+          ".claude/commands/ship.md:32",
+          ".gemini/commands/review.toml:14",
+          ".gemini/commands/ship.toml:31",
+          "commands/review.toml:14",
+          "commands/ship.toml:31",
+          "agents/code-reviewer.md:53"
+        ],
+        "confidence": "High",
+        "evidence": "The code-reviewer persona defines Required as must-address-before-merge, while /review requests Critical/Important/Suggestion and /ship explicitly aggregates Critical/Important. Required findings have no declared mapping into ship blockers.",
+        "impact": "A review containing only Required findings can be omitted or demoted during merge, permitting a GO decision that contradicts the review contract.",
+        "remedy": "Use one canonical severity vocabulary and an explicit merge mapping. Treat unresolved Required findings as blockers unless a permitted deferral is explicitly accepted and recorded.",
+        "verification": "Test synthesis using a synthetic report with one Required finding and no Critical findings, including explicit accepted deferral. Validate all three command surfaces use the same mapping; model behavior would require separately authorized evaluation.",
+        "user_decision": "Whether the canonical labels remain Critical/Required/Optional/Nit or another explicitly mapped scheme.",
+        "sources": []
+      },
+      {
+        "id": "D03",
+        "priority": "P1",
+        "category": "invalid runnable example",
+        "locations": [
+          "docs/advanced-per-agent-configuration.md:47"
+        ],
+        "confidence": "High",
+        "evidence": "The Gemini agent example omits required name and description, adds thinking_level, and selects grep rather than grep_search. Current official agentLoader.ts has a strict schema requiring name/description and no thinking_level field; official examples use grep_search.",
+        "impact": "Copying the documented example can prevent agent loading. Direct Gemini API generation options have been conflated with the CLI agent-file schema.",
+        "remedy": "Use a complete schema-supported example, prefer model inheritance or a verified model identifier, and distinguish API thinking configuration from supported CLI frontmatter. Do not assume Antigravity shares Gemini's entire schema.",
+        "verification": "Parse the example against the current official local-agent schema or run free local agent catalog validation after explicit install authorization; verify requested tools actually resolve.",
+        "user_decision": "Whether Gemini/Antigravity advanced adapters are maintained or clearly labeled as unverified optional recipes.",
+        "sources": [
+          "https://github.com/google-gemini/gemini-cli/blob/main/packages/core/src/agents/agentLoader.ts",
+          "https://github.com/google-gemini/gemini-cli/blob/main/docs/core/subagents.md"
+        ]
+      },
+      {
+        "id": "D04",
+        "priority": "P2",
+        "category": "configuration documentation",
+        "locations": [
+          "docs/gemini-cli-setup.md:90"
+        ],
+        "confidence": "High",
+        "evidence": "The guide puts MCP configuration in ~/.gemini/config.json. Official Gemini CLI documentation configures MCP servers and hooks in ~/.gemini/settings.json.",
+        "impact": "Users edit a file the documented host does not load and see missing tools.",
+        "remedy": "Use settings.json with a minimal supported example and separate user/workspace scopes.",
+        "verification": "Check configuration discovery with a harmless local MCP configuration after approval, or add an offline documentation assertion tied to the officially documented path.",
+        "user_decision": "None beyond maintaining this inherited guide.",
+        "sources": [
+          "https://github.com/google-gemini/gemini-cli/blob/main/docs/tools/mcp-server.md"
+        ]
+      },
+      {
+        "id": "D05",
+        "priority": "P2",
+        "category": "instruction scope",
+        "locations": [
+          "docs/antigravity-setup.md:110",
+          "AGENTS.md:5",
+          "CONTRIBUTING.md:87"
+        ],
+        "confidence": "High",
+        "evidence": "Antigravity setup still says to copy or link AGENTS.md into the consuming workspace, while the repository explicitly says its root instruction files configure this fork only and must not be copied.",
+        "impact": "Consumers import fork-specific contribution, orchestration, Git, and repository assumptions into unrelated projects, potentially overwriting their own instructions.",
+        "remedy": "Provide a short consumer-owned template or routing pointer that carries accepted authorization and proportional checks; do not copy the repository instruction file.",
+        "verification": "Add a documentation check for prohibited root-instruction copy guidance and inspect the replacement template for repository-specific paths and policies.",
+        "user_decision": "Whether to provide one generated host-neutral consumer template or separate host templates.",
+        "sources": []
+      },
+      {
+        "id": "D06",
+        "priority": "P2",
+        "category": "setup data preservation",
+        "locations": [
+          "docs/gemini-cli-setup.md:45",
+          "docs/windsurf-setup.md:11"
+        ],
+        "confidence": "High",
+        "evidence": "Both documented setup recipes use cat ... > GEMINI.md/.windsurfrules without checking existing content. The guides describe adding persistent project context and apply to existing projects.",
+        "impact": "Following setup can discard existing project conventions, security policies, and user instructions.",
+        "remedy": "Create a separate imported file or refuse overwrite and present a scoped merge. Avoid pasting entire workflows when native skill loading is available.",
+        "verification": "Exercise the copy recipe in a temporary consumer project with an existing sentinel instruction file; its bytes must survive. No host or model call is necessary.",
+        "user_decision": "Preferred import/managed-section strategy for consumers with existing rules.",
+        "sources": []
+      },
+      {
+        "id": "D07",
+        "priority": "P2",
+        "category": "portability/documentation",
+        "locations": [
+          "README.md:80",
+          "docs/getting-started.md:167",
+          "docs/skill-anatomy.md:147",
+          "CONTRIBUTING.md:65",
+          "docs/developer-onboarding.md:88"
+        ],
+        "confidence": "High",
+        "evidence": "The sparse-install workaround copies shared references inside the installed skill, but actual links such as ../../references/testing-patterns.md resolve to the host-level sibling references directory, not <skill>/references. Contributor docs also ban reference material inside skills while anatomy permits skill-owned references, and anatomy prescribes repo-relative helper paths that conflict with the corrected installed-root guidance.",
+        "impact": "The suggested workaround leaves links broken; new skills can repeat helper-path portability defects and contributors receive contradictory packaging instructions. The general sparse-install gap is already acknowledged in #361; this finding concerns the incorrect workaround and inconsistent authoring contract.",
+        "remedy": "State the correct sibling layout or explicitly rewrite links for a self-contained distribution. Distinguish shared pack references from skill-owned resources and require helpers to resolve from the installed skill root.",
+        "verification": "Build a temporary sparse installation from actual tracked resources and resolve every file/helper reference there. Check both full-pack and sparse layouts without invoking a model.",
+        "user_decision": "Keep full-pack distribution as the supported contract, or add generated self-contained skill bundles with one source of truth.",
+        "sources": [
+          "https://github.com/addyosmani/agent-skills/issues/361"
+        ]
+      },
+      {
+        "id": "D08",
+        "priority": "P1",
+        "category": "CI verification",
+        "locations": [
+          ".github/workflows/test-plugin-install.yml:173",
+          ".github/workflows/test-plugin-install.yml:179",
+          ".claude-plugin/marketplace.json:13"
+        ],
+        "confidence": "High",
+        "evidence": "CI adds the checkout as a marketplace, but that marketplace's plugin source is GitHub raiinman/agent-skills with no PR ref/SHA. The install step consequently fetches the declared remote source rather than asserting it loaded the tested checkout.",
+        "impact": "A PR can pass installation against the remote default branch while its own installation is broken. On a new fork/private source this also creates avoidable remote availability dependence.",
+        "remedy": "Test a temporary local-source marketplace pointed at the checkout, or another native local installation path. Assert installed plugin version/content/commit equals the checkout; keep remote-marketplace smoke coverage separate.",
+        "verification": "Make a sentinel manifest/content change in a temporary checkout and verify installed metadata contains it. A local plugin install need not invoke a model, but current user instructions prohibit installs until approval.",
+        "user_decision": "Whether CI should validate only the supported Codex path, preserve Claude compatibility, and separately test remote marketplace distribution.",
+        "sources": [
+          "https://code.claude.com/docs/en/plugin-marketplaces"
+        ]
+      },
+      {
+        "id": "D09",
+        "priority": "P2",
+        "category": "host guide modernization",
+        "locations": [
+          "docs/windsurf-setup.md:7",
+          "docs/windsurf-setup.md:29",
+          "README.md:157"
+        ],
+        "confidence": "High",
+        "evidence": "The guide concatenates three complete skills totaling 48,597 characters into one legacy rules file and recommends pasting full skills globally. Current official docs support native skills; workspace rules have a 12,000-character per-file limit and global rules a 6,000-character limit. Windsurf docs now redirect to Devin Desktop, retaining legacy paths as fallbacks.",
+        "impact": "The recommended configuration exceeds documented rule limits and defeats progressive loading. Users may lose later workflow instructions or carry excessive always-on context.",
+        "remedy": "Use native skill folders and short policies, preserving shared reference layout; identify modern and legacy host/path names with a dated support note.",
+        "verification": "Measure generated rule lengths and inspect discovery in a clean supported host after approval. Confirm all copied skill resources resolve offline first.",
+        "user_decision": "Whether Windsurf/Devin Desktop remains a maintained host or is moved to a short unverified entry.",
+        "sources": [
+          "https://docs.devin.ai/desktop/cascade/skills",
+          "https://docs.devin.ai/desktop/cascade/memories"
+        ]
+      },
+      {
+        "id": "D10",
+        "priority": "P2",
+        "category": "current tooling contract",
+        "locations": [
+          ".claude/commands/webperf.md:10",
+          ".gemini/commands/webperf.toml:9",
+          "commands/webperf.toml:9",
+          "agents/web-performance-auditor.md:20"
+        ],
+        "confidence": "High",
+        "evidence": "Current upstream ChromeDevTools MCP lighthouse.ts expressly excludes performance; onlyCategories contains accessibility, seo, best-practices, and agentic-browsing. The command/persona present chrome-devtools lighthouse_audit output as a Lighthouse performance artifact source. That tool's output is summary/report paths rather than a raw performance Lighthouse result.",
+        "impact": "The suggested capture cannot produce the requested performance score/CWV evidence, and treating its JSON as a raw Lighthouse performance result is a schema mismatch. The metric-honesty rule mitigates fabrication but does not repair capture instructions.",
+        "remedy": "Distinguish standalone Lighthouse performance reports from MCP's non-performance Lighthouse audit and use performance_* traces for MCP performance evidence. Document actual artifact envelopes/report paths and required CLI page selection for the supported version.",
+        "verification": "Use saved genuine tool envelopes and standalone Lighthouse fixtures to check parsing/capability detection, with missing fields remaining unmeasured; a free browser capture can be authorized later.",
+        "user_decision": "Pin supported ChromeDevTools MCP capabilities/version or detect them from tool schemas at runtime.",
+        "sources": [
+          "https://raw.githubusercontent.com/ChromeDevTools/chrome-devtools-mcp/main/src/tools/lighthouse.ts",
+          "https://github.com/ChromeDevTools/chrome-devtools-mcp/blob/main/docs/cli.md"
+        ]
+      },
+      {
+        "id": "D11",
+        "priority": "P2",
+        "category": "security/performance guidance",
+        "locations": [
+          "agents/web-performance-auditor.md:91"
+        ],
+        "confidence": "High",
+        "evidence": "The persona requires no Cache-Control:no-store on HTML for bfcache. Chrome's official guidance documents eligibility for safely handled no-store pages since the 2025 rollout and says no-store remains appropriate for sensitive pages.",
+        "impact": "The blanket recommendation can remove a valid sensitive-response cache policy for a performance benefit that is no longer universally required.",
+        "remedy": "Measure bfcache eligibility/reasons for the supported browsers and preserve security-driven no-store policies. Distinguish HTTP caching from bfcache.",
+        "verification": "Test back/forward navigation on a sensitive no-store page and inspect not-restored reasons under declared browser versions; assert remediation preserves the security header.",
+        "user_decision": "Supported browser matrix and security requirements for the audited product; not a universal pack threshold.",
+        "sources": [
+          "https://developer.chrome.com/docs/web-platform/bfcache-ccns"
+        ]
+      },
+      {
+        "id": "D12",
+        "priority": "P2",
+        "category": "OpenCode integration",
+        "locations": [
+          "AGENTS.md:36",
+          ".opencode/skills:1",
+          "docs/opencode-setup.md:19"
+        ],
+        "confidence": "High for false claim and checked-out file shape; platform coverage remains unverified",
+        "evidence": "AGENTS.md says OpenCode does not support slash commands, while the guide and current official docs support project .opencode/commands. The tracked .opencode/skills is a mode-120000 symlink, but on this Windows checkout it is an ordinary file containing ../skills/, not a discovery directory. The guide's early copy instruction also precedes its later caveat that no command files exist in the repository.",
+        "impact": "Repository contributors using OpenCode on default Windows Git checkouts can have no discovered skill directory, and readers are given conflicting command availability/setup guidance.",
+        "remedy": "State that optional commands are supported but not shipped here; remove the non-runnable copy step and offer a Windows-safe discovery adapter or clearly document the symlink requirement.",
+        "verification": "Inspect OpenCode's discovered skill catalog on Unix and a Windows checkout with core.symlinks=false; validate the documented command setup against tracked files.",
+        "user_decision": "Whether OpenCode source-checkout convenience is supported, and whether to ship generated command adapters or only documented examples.",
+        "sources": [
+          "https://github.com/anomalyco/opencode/blob/dev/packages/web/src/content/docs/commands.mdx"
+        ]
+      }
+    ],
+    "opportunities": [
+      {
+        "id": "M01",
+        "locations": [
+          "docs/developer-onboarding.md:39",
+          "docs/developer-onboarding.md:48",
+          "README.md:378",
+          "CLAUDE.md:17",
+          ".github/ISSUE_TEMPLATE/skill-gap.yml:15"
+        ],
+        "confidence": "High",
+        "evidence": "Onboarding says Node20 is what CI runs, but CI uses24 and also requires Python; its 'everything CI runs' command list omits current validators/tests. README script count13 no longer matches tracked scripts, CLAUDE phase/command lists omit constraints, and the issue dropdown omits constraint-driven-development.",
+        "remedy": "Generate or validate small catalog/runtime/check inventories from tracked source and CI; preserve concise onboarding while linking a complete free verification command.",
+        "verification": "Compare dropdown skill choices and doc counts against the catalog and workflow; enforce the selected minimum Node/Python versions in a declared matrix.",
+        "user_decision": "Minimum supported runtimes and whether generated inventory is worth maintaining."
+      },
+      {
+        "id": "M02",
+        "locations": [
+          ".github/workflows/test-plugin-install.yml:154",
+          ".github/workflows/test-plugin-install.yml:167",
+          ".github/workflows/test-plugin-install.yml:148"
+        ],
+        "confidence": "High about unpinned dependency and dependency graph; branch-protection impact conditional",
+        "evidence": "Both CI plugin jobs install the latest Claude package without a pinned version; final plugin validation depends on three validation jobs but not test-hooks. This gives changing external CLI behavior an uncontrolled input and allows install smoke work to proceed while hook checks fail.",
+        "remedy": "Pin an explicitly maintained compatibility version and update deliberately; decide the aggregate required-check contract and include hook tests if aggregate validation is the release gate. Consider least-privilege workflow permissions and checkout credential settings.",
+        "verification": "Record actual CLI version in CI and reproduce manifest checks with that version; inspect required branch-protection contexts before changing job dependencies.",
+        "user_decision": "Pinning/update policy, network install policy, and which CI statuses must gate merge/release."
+      },
+      {
+        "id": "M03",
+        "locations": [
+          "docs/opencode-setup.md:102",
+          "docs/copilot-setup.md:60",
+          "docs/gemini-cli-setup.md:60",
+          "docs/advanced-per-agent-configuration.md:10",
+          "docs/comparison.md:22"
+        ],
+        "confidence": "High for local policy differences; host runtime effects unverified",
+        "evidence": "Inherited consumer templates retain 'even a small chance' mandatory workflows, npm-test-after-every-change and ask-first defaults, and always-loaded full skills, while the fork's supported policy uses proportional work and preserved authorization. Comparison is explicitly inherited but detailed current competitive/host claims remain undated.",
+        "remedy": "Create a support matrix with dates/evidence, separate fork policy from upstream comparisons, and reuse one scoped consumer policy template rather than maintaining contradicting copies. Do not silently broaden native-host claims.",
+        "verification": "Audit generated templates against the canonical fork policy and run static link/path/configuration checks. Native host and comparative behavioral verification stays separate and requires authorization.",
+        "user_decision": "How much inherited host documentation to maintain versus prune; whether to retain detailed competitor comparisons."
+      }
+    ],
+    "changes": "Only scratch audit artifacts created outside checkout; no repository edits, installs, commits, pushes, PRs, or model/provider invocations."
+  }
+}
