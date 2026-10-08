@@ -141,7 +141,7 @@ return null;
 
 ### Rollout Decision Thresholds
 
-Use these thresholds to decide whether to advance, hold, or roll back at each stage:
+Choose thresholds from the service's SLO, historical variance, observation window, and minimum traffic sample. The ratios below are example starting points, not universal release gates. A zero or near-zero baseline needs an absolute error budget or count/rate limit; an empty sample is not evidence of success.
 
 | Metric | Advance (green) | Hold and investigate (yellow) | Roll back (red) |
 |--------|-----------------|-------------------------------|-----------------|
@@ -190,6 +190,12 @@ Client metrics:
 ```typescript
 // Set up error boundary with reporting
 class ErrorBoundary extends React.Component {
+  state = { hasError: false };
+
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+
   componentDidCatch(error: Error, info: React.ErrorInfo) {
     // Report to error tracking service
     reportError(error, {
@@ -211,7 +217,7 @@ class ErrorBoundary extends React.Component {
 app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
   reportError(err, {
     method: req.method,
-    url: req.url,
+    route: req.route?.path ?? '<unmatched>', // omit query strings and tokens
     userId: req.user?.id,
   });
 

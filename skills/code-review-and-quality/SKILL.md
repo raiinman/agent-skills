@@ -190,6 +190,8 @@ Label every comment with its severity so the author knows what's required vs opt
 
 This prevents authors from treating all feedback as mandatory and wasting time on optional suggestions.
 
+For each required finding, name the triggering input or environment, show the observable failure, and establish that the condition is supported or plausibly reachable. Separate impact from evidence confidence and applicability. A severe hypothetical is not a confirmed blocker; report unresolved assumptions as questions or conditional findings. Do not invent numerical probabilities. A reachable, low-frequency data-loss or security failure can still require a fix.
+
 **Lead with what matters.** Order findings by leverage: correctness and security first, then structural regressions and missed simplifications, then everything else. Don't bury a real issue under cosmetic nits — a few high-conviction comments beat a long list. If you have one structural problem and ten nits, the structural problem *is* the review.
 
 ### Step 5: Verify the Verification

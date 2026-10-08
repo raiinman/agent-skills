@@ -63,7 +63,17 @@ const STOP = new Set([
   'we', 'when', 'with', 'you', 'your', 'help', 'me', 'i',
 ]);
 
+// Explicit vocabulary aliases, not a claim of semantic routing. Do not merge
+// different concepts such as authentication and authorization.
+const TERM_FORMS = new Map([
+  ['doc', 'document'], ['docs', 'document'], ['documentation', 'document'],
+  ['config', 'configure'], ['configs', 'configure'], ['configuration', 'configure'], ['configurations', 'configure'],
+  ['auth', 'authenticate'], ['authentication', 'authenticate'],
+  ['deps', 'dependencies'], ['repo', 'repository'], ['repos', 'repository'],
+]);
+
 function stem(t) {
+  t = TERM_FORMS.get(t) || t;
   // Light suffix stripping so "conflicts"/"conflict", "branching"/"branch",
   // "architectural"/"architecture" cluster together. Not a real stemmer.
   for (const suf of ['ally', 'ing', 'ed', 'es', 'al']) {
@@ -759,4 +769,4 @@ function main(args = process.argv.slice(2)) {
 
 if (require.main === module) main();
 
-module.exports = { materializeWorkspace, parseGrading, clearGradingSlot, persistGradingOutcome, extractExecutorModel, runBehavioral };
+module.exports = { materializeWorkspace, parseGrading, clearGradingSlot, persistGradingOutcome, extractExecutorModel, runBehavioral, tokenize, buildCorpus, rankSkills };

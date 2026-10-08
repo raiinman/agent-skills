@@ -83,10 +83,11 @@ const result = items.reduce((acc, item) => ({
 }), {});
 
 // CLEAR: Named intermediate step
-const countById = new Map<string, number>();
-for (const item of items) {
-  countById.set(item.id, (countById.get(item.id) ?? 0) + 1);
-}
+const countById = (counts, item) => ({
+  ...counts,
+  [item.id]: { ...counts[item.id], count: (counts[item.id]?.count ?? 0) + 1 }
+});
+const result = items.reduce(countById, {});
 ```
 
 ### 4. Maintain Balance
@@ -189,15 +190,19 @@ If the "simplified" version is harder to understand or review, revert. Not every
 ### TypeScript / JavaScript
 
 ```typescript
-// SIMPLIFY: Unnecessary async wrapper
+// SIMPLIFY: Keep the async error contract
 // Before
 async function getUser(id: string): Promise<User> {
   return await userService.findById(id);
 }
 // After
-function getUser(id: string): Promise<User> {
+async function getUser(id: string): Promise<User> {
   return userService.findById(id);
 }
+
+// Keep return await when a surrounding catch/finally or diagnostic stack
+// depends on the await. Removing async would expose synchronous throws
+// instead of the rejected promise callers currently receive.
 
 // SIMPLIFY: Verbose conditional assignment
 // Before

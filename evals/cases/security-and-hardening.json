@@ -21,6 +21,10 @@
       {
         "prompt": "Is this new package safe to install? Check for typosquatting and supply chain risk",
         "top_k": 3
+      },
+      {
+        "prompt": "Add auth to our API endpoints",
+        "top_k": 3
       }
     ],
     "negative": [

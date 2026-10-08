@@ -168,9 +168,10 @@ The reviewer's output is data, not verdict. **You are still the orchestrator.** 
 For each finding, classify in this **precedence order** (first matching class wins):
 
 1. **Contract misread** — reviewer flagged something specifically because the CONTRACT you provided was unclear or incomplete. Fix the contract first, re-classify on the next cycle.
-2. **Valid + actionable** — real issue requiring a change to the artifact. Change it and re-loop when edits are authorized. For a review-only request, report the proposed correction without modifying the artifact.
-3. **Valid trade-off** — issue is real but cost of fixing exceeds cost of accepting. Document the trade-off explicitly so the user sees it.
-4. **Noise** — reviewer flagged something that's actually correct under context the reviewer didn't have. Note it, move on, and ask: would adding that context to the contract have prevented the false flag?
+2. **Valid but outside the contract** — the mechanism is real, but its triggering conditions are excluded by the supported inputs or environment. Record the condition and evidence; do not expand the product or restart the cycle to solve it. If exclusion is uncertain, verify or report the assumption rather than silently dismissing it.
+3. **Valid + actionable** — a reachable issue requiring a change to the artifact. Name the trigger and observable failure, then change it and re-loop when edits are authorized. For a review-only request, report the proposed correction without modifying the artifact. Rare but reachable security or data-loss failures remain actionable.
+4. **Valid trade-off** — issue is real but cost of fixing exceeds cost of accepting. Document the trade-off explicitly so the user sees it.
+5. **Noise** — reviewer flagged something that's actually correct under context the reviewer didn't have. Note it, move on, and ask: would adding that context to the contract have prevented the false flag?
 
 A fresh reviewer can be wrong because it lacks context. Don't defer just because it's "fresh."
 

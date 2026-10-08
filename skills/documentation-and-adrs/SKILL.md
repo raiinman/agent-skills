@@ -278,6 +278,8 @@ Special consideration for AI agent context:
 
 ## Verification
 
+Trace changed behavior to its documentation before sign-off: public contracts to API docs, setup/configuration to the README or host guide, and design changes to the relevant ADR. Compare actual commands and paths with repository configuration. Execute examples that promise runnable behavior, or state the prerequisites and what was not exercised. Update the affected docs in the same task; an older commit date is only a review signal, not proof of drift. Reuse existing example tests or link checks rather than introducing a second source of truth.
+
 After documenting:
 
 - [ ] ADRs exist for all significant architectural decisions

@@ -51,7 +51,7 @@ Telemetry without a question is noise. Before instrumenting anything:
 - [ ] Context survives async boundaries — queue messages carry trace metadata
 - [ ] Manual spans only around meaningful internal units of work, with the attributes on-call will filter by
 - [ ] No secrets or PII as span attributes
-- [ ] Head-based sampling at a low default rate; 100% of errors kept if tail sampling is available
+- [ ] Sampling cost and error-retention target are explicit; tail sampling receives all candidate traces when retaining every error is required (it cannot recover traces discarded at the head)
 
 ## Alerting
 
