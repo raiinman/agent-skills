@@ -29,14 +29,17 @@
     {
       "id": 1,
       "prompt": "Before running an irreversible data migration, subject the migration plan to adversarial review.",
-      "expected_output": "Claims extracted, doubts raised against each, reconciliation, and a go or stop verdict",
+      "expected_output": "Claims extracted, independent fresh-context review of the artifact and contract, reconciled findings, and a go or stop verdict without performing the migration",
       "files": [
         "doubt-driven-development"
       ],
       "expectations": [
         "Non-trivial claims in the plan are extracted and challenged individually",
         "At least one assumption is tested rather than accepted",
-        "The verdict distinguishes verified claims from surviving doubts"
+        "The verdict distinguishes verified claims from surviving doubts",
+        "The execution trace contains an actual independent reviewer invocation, not only the main assistant describing a second opinion",
+        "The independent reviewer receives the artifact and contract without the author's conclusion or supporting reasoning",
+        "The main assistant reconciles the review findings against the artifact and contract, and does not perform the migration during this review-only request"
       ]
     }
   ]
