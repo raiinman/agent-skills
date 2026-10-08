@@ -49,4 +49,10 @@ Keep the plugin package together so links to the root `references/` directory re
 
 Local validators check skill structure, lexical routing, references, command parity, artifact paths, and manifest versions. These checks do not establish native model invocation reliability. Gemini and other inherited host integrations retain portable content; native runtime verification is a later stage.
 
-Before treating a new version as behaviorally proven, exercise representative tasks in Codex and record host/model versions and observed outcomes. Paid behavioral runs are optional and explicitly requested. The [eval guide](../evals/README.md) describes the existing Claude-backed runner's complete package snapshots, explicit model selections, and retained evidence. That runner's results do not establish native Codex or Gemini behavior.
+Before treating a new version as behaviorally proven, exercise representative tasks in Codex and record host/model versions and observed outcomes. Paid behavioral runs are optional and explicitly requested. The [eval guide](../evals/README.md) describes both backends, complete package snapshots, explicit model selections, and retained evidence. Preview the Codex plan for free:
+
+```bash
+node scripts/run-evals.js --behavioral test-driven-development --backend codex --dry-run
+```
+
+A requested live run adds `--executor-model <exact-id>` and `--grader-model <exact-id>` and spends tokens on both calls. The Codex adapter selects the archived skill by its exact file path, so it measures explicitly selected behavior rather than installed-plugin discovery or automatic routing. Local tests use fake events; live Codex execution and sandbox enforcement remain unverified until a paid run is requested. Gemini has no behavioral backend yet.

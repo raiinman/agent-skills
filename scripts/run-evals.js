@@ -18,10 +18,10 @@
  *       below the checked-in CI baseline.
  *   Tier 3 (opt-in, costs tokens, never in CI):
  *     node scripts/run-evals.js --behavioral <skill> --executor-model <id>
- *       --grader-model <id> [--dry-run]
- *     Runs each behavioral eval through headless `claude` in a throwaway
+ *       --grader-model <id> [--backend claude|codex] [--dry-run]
+ *     Runs each behavioral eval through headless Claude or Codex in a throwaway
  *     workspace. Execution evals materialize files[] fixtures and grade the
- *     full stream-json trace; dialogue evals need no fixture and grade the
+ *     full JSONL trace; dialogue evals may omit fixtures and grade the
  *     conversational turns. --dry-run prints the plan without executing.
  *
  * Zero dependencies. Exit code 1 on any error-level failure.
@@ -34,6 +34,7 @@ const os = require('os');
 const path = require('path');
 const { createHash } = require('node:crypto');
 const { execFileSync } = require('child_process');
+const { getEvalBackend, extractExecutorModel } = require('./lib/eval-backends');
 
 const ROOT = path.join(__dirname, '..');
 const SKILLS_DIR = path.join(ROOT, 'skills');
@@ -43,12 +44,6 @@ const RESULTS_DIR = path.join(ROOT, 'evals', 'results');
 
 const EXECUTOR_TIMEOUT_MS = 15 * 60 * 1000;
 const GRADER_TIMEOUT_MS = 5 * 60 * 1000;
-
-// Tools the Tier-3 executor may use inside its throwaway workspace. Edits are
-// auto-accepted (acceptEdits) and these tools are pre-approved so the agent
-// can perform the skill instead of narrating it. Tier 3 is opt-in and spends
-// tokens; review this list if your fixtures invoke anything unusual.
-const EXECUTOR_TOOLS = 'Skill,Agent,Read,Glob,Grep,Edit,Write,Bash,WebFetch,WebSearch';
 
 // Required minimums per case file (evals/README.md).
 const MIN_POSITIVE = 3;
@@ -387,7 +382,7 @@ function runDeterministic(minRank1) {
   process.exit(errors ? 1 : 0);
 }
 
-// ---------- tier 3 (opt-in, via claude -p) ----------
+// ---------- tier 3 (opt-in, via selected headless backend) ----------
 
 function materializeWorkspace(ev, fixturesDir = FIXTURES_DIR) {
   // Fresh throwaway project dir per eval; fixtures (if any) copied in so the
@@ -416,6 +411,10 @@ function materializeWorkspace(ev, fixturesDir = FIXTURES_DIR) {
     // commit. A local identity keeps this deterministic and never leaves the
     // throwaway workspace.
     execFileSync('git', ['init', '--quiet'], { cwd: workspace });
+    // Detached maintenance can outlive a fixture commit and race workspace
+    // removal. These repositories live for one eval and need no housekeeping.
+    execFileSync('git', ['config', 'maintenance.auto', 'false'], { cwd: workspace });
+    execFileSync('git', ['config', 'gc.auto', '0'], { cwd: workspace });
     execFileSync('git', ['config', 'core.autocrlf', 'false'], { cwd: workspace });
     execFileSync('git', ['config', 'user.name', 'Skill Eval'], { cwd: workspace });
     execFileSync('git', ['config', 'user.email', 'skill-eval@example.invalid'], { cwd: workspace });
@@ -482,19 +481,6 @@ function parseGrading(raw, expectations) {
   return g;
 }
 
-function extractExecutorModel(trace) {
-  for (const line of trace.split('\n')) {
-    if (!line.trim()) continue;
-    try {
-      const event = JSON.parse(line);
-      if (event.type === 'system' && event.subtype === 'init') {
-        return event.model || null;
-      }
-    } catch { continue; }
-  }
-  return null;
-}
-
 function clearGradingSlot(base) {
   fs.rmSync(`${base}.grading.json`, { force: true });
   fs.rmSync(`${base}.grading.raw.txt`, { force: true });
@@ -543,16 +529,7 @@ function gitValue(root, args) {
   catch { return null; }
 }
 
-function observedModels(value) {
-  return [...new Set([
-    ...(typeof value?.model === 'string' ? [value.model] : []),
-    ...(typeof value?.message?.model === 'string' ? [value.message.model] : []),
-    ...Object.keys(value?.modelUsage || {}),
-    ...Object.keys(value?.model_usage || {}),
-  ])].sort();
-}
-
-function snapshotPackage(root, destination) {
+function snapshotPackage(root, destination, manifestFile) {
   fs.mkdirSync(destination, { recursive: true });
   // Runtime assets stay beside the fixture workspace, never inside its git
   // history. Exclude contributor instructions and repository-level caches,
@@ -564,7 +541,7 @@ function snapshotPackage(root, destination) {
       fs.cpSync(source, path.join(destination, relative), { recursive: true, dereference: true });
     }
   }
-  const manifest = JSON.parse(fs.readFileSync(path.join(destination, '.claude-plugin', 'plugin.json'), 'utf8'));
+  const manifest = JSON.parse(fs.readFileSync(path.join(destination, manifestFile), 'utf8'));
   if (!VALID_SKILL_NAME.test(manifest.name)) throw new Error('Plugin manifest needs a valid name');
   return manifest;
 }
@@ -594,7 +571,9 @@ function validateBehavioralCase(data, fixturesDir) {
 }
 
 function runBehavioral(skillName, options = {}) {
-  const { dryRun = false, executorModel, graderModel, invokeClaude = execFileSync, root = ROOT } = options;
+  const { dryRun = false, executorModel, graderModel, root = ROOT } = options;
+  const backend = getEvalBackend(options.backend || 'claude');
+  const invokeCli = (backend.name === 'codex' ? options.invokeCodex : options.invokeClaude) || execFileSync;
   if (!skillName || !VALID_SKILL_NAME.test(skillName)) throw new Error(`Invalid skill name: "${skillName}" — must be kebab-case`);
   if (!dryRun && (!executorModel?.trim() || !graderModel?.trim())) {
     throw new Error('Live behavioral runs require --executor-model and --grader-model; use exact model IDs for comparisons');
@@ -610,18 +589,18 @@ function runBehavioral(skillName, options = {}) {
   if (dryRun) {
     for (const ev of data.evals) {
       const artifact = ev.kind === 'dialogue' ? 'dialogue transcript' : 'execution trace';
-      console.log(`[dry-run] eval ${ev.id}: ${artifact}; complete plugin snapshot via --plugin-dir; executor --model ${executorModel || '<executor-model>'}; grader --model ${graderModel || '<grader-model>'}; no CLI calls or result files`);
+      console.log(`[dry-run] eval ${ev.id}: ${artifact}; backend ${backend.name}; skill loading ${backend.skillLoading}; executor --model ${executorModel || '<executor-model>'}; grader --model ${graderModel || '<grader-model>'}; no CLI calls or result files`);
     }
     return { failures: 0, runDir: null };
   }
 
-  const claudeVersion = invokeClaude('claude', ['--version'], { encoding: 'utf8', timeout: 10000 }).trim();
+  const cliVersion = invokeCli(backend.command, ['--version'], { encoding: 'utf8', timeout: 10000 }).trim();
   const resultsDir = path.join(root, 'evals', 'results');
   fs.mkdirSync(resultsDir, { recursive: true });
   const startedAt = new Date().toISOString();
   const runDir = fs.mkdtempSync(path.join(resultsDir, `${startedAt.replace(/[:.]/g, '-')}-`));
   const packageDir = path.join(runDir, 'package');
-  const manifest = snapshotPackage(root, packageDir);
+  const manifest = snapshotPackage(root, packageDir, backend.manifestFile);
   if (!fs.existsSync(path.join(packageDir, 'skills', skillName, 'SKILL.md'))) throw new Error('Selected skill is missing from the package snapshot');
   fs.writeFileSync(path.join(runDir, 'case.json'), caseSource);
   const savedFixtures = path.join(runDir, 'fixtures');
@@ -636,7 +615,8 @@ function runBehavioral(skillName, options = {}) {
     timestamp: startedAt,
     repository_commit: gitValue(root, ['rev-parse', 'HEAD']),
     repository_dirty: dirty === null ? null : dirty !== '',
-    claude_version: claudeVersion, node_version: process.version, platform: process.platform,
+    backend: backend.name, skill_loading: backend.skillLoading, cli_version: cliVersion,
+    [`${backend.name}_version`]: cliVersion, node_version: process.version, platform: process.platform,
     plugin_name: manifest.name, plugin_version: manifest.version || null,
     package_sha256: hashTree(packageDir), fixtures_sha256: hashTree(savedFixtures),
     case_sha256: createHash('sha256').update(caseSource).digest('hex'),
@@ -656,28 +636,22 @@ function runBehavioral(skillName, options = {}) {
         ? fs.mkdtempSync(path.join(os.tmpdir(), 'agent-skills-dialogue-eval-'))
         : materializeWorkspace(ev, savedFixtures);
       graderWorkspace = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-skills-grader-'));
-      const executorArgs = ['-p', '--verbose', '--output-format', 'stream-json',
-        '--model', executorModel, '--plugin-dir', packageDir,
-        '--setting-sources', '', '--no-session-persistence',
-        '--permission-mode', 'acceptEdits', '--tools', EXECUTOR_TOOLS, '--allowedTools', EXECUTOR_TOOLS,
-        '--append-system-prompt', `Use the ${manifest.name}:${skillName} skill from the loaded plugin for this task. Its supporting files are in ${path.join(packageDir, 'skills', skillName)}. Respect the requested scope.`];
-      const graderArgs = ['-p', '--output-format', 'json', '--model', graderModel,
-        '--safe-mode', '--no-session-persistence', '--tools', '', '--disallowedTools', 'mcp__*'];
+      const executorArgs = backend.executorArguments({ model: executorModel, packageDir, skillName, manifest, workspace });
+      const executorPrompt = backend.executorPrompt({ prompt: ev.prompt, packageDir, skillName });
+      const graderArgs = backend.graderArguments({ model: graderModel, workspace: graderWorkspace });
+      fs.writeFileSync(`${base}.executor-prompt.txt`, executorPrompt);
       Object.assign(caseMeta, { executor_arguments: executorArgs, grader_arguments: graderArgs });
       writeJson(`${base}.run.json`, caseMeta);
       console.log(`eval ${ev.id}: executing ${kind} eval in ${workspace} ...`);
       phase = 'executor';
-      const trace = invokeClaude('claude', executorArgs, {
-        input: ev.prompt, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, cwd: workspace, timeout: EXECUTOR_TIMEOUT_MS,
+      const trace = invokeCli(backend.command, executorArgs, {
+        input: executorPrompt, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, cwd: workspace, timeout: EXECUTOR_TIMEOUT_MS,
       });
       fs.writeFileSync(`${base}.trace.jsonl`, trace);
-      caseMeta.executor_model = extractExecutorModel(trace);
-      const events = trace.split('\n').flatMap((line) => {
-        try { return [JSON.parse(line)]; } catch { return []; }
-      });
-      caseMeta.executor_models = [...new Set(events.flatMap(observedModels))].sort();
-      const executorResult = events.findLast((event) => event?.type === 'result');
-      if (executorResult?.subtype !== 'success' || executorResult.is_error) {
+      const execution = backend.parseExecution(trace);
+      caseMeta.executor_model = execution.model;
+      caseMeta.executor_models = execution.models;
+      if (!execution.success) {
         throw new Error('Executor did not produce a successful completion result');
       }
       const evidenceRule = kind === 'dialogue'
@@ -691,15 +665,14 @@ function runBehavioral(skillName, options = {}) {
         'Return ONLY JSON: {"expectations":[{"id":integer,"text":string,"passed":boolean,"evidence":string}],"summary":{"passed":number,"failed":number,"total":number,"pass_rate":number}}. Each id binds to the numbered expectation.',
       ].join('\n\n');
       phase = 'grader';
-      const raw = invokeClaude('claude', graderArgs, {
+      const raw = invokeCli(backend.command, graderArgs, {
         input: graderPrompt, encoding: 'utf8', maxBuffer: 16 * 1024 * 1024, cwd: graderWorkspace, timeout: GRADER_TIMEOUT_MS,
       });
-      fs.writeFileSync(`${base}.grader-response.json`, raw);
-      const envelope = JSON.parse(raw);
-      caseMeta.grader_models = observedModels(envelope);
+      fs.writeFileSync(`${base}.grader-response.${backend.graderExtension}`, raw);
+      const response = backend.parseGrading(raw);
+      caseMeta.grader_models = response.models;
       caseMeta.grader_model = caseMeta.grader_models.length === 1 ? caseMeta.grader_models[0] : null;
-      const acceptedResponse = !envelope.is_error && envelope.subtype === 'success' && typeof envelope.result === 'string';
-      const grading = acceptedResponse ? parseGrading(envelope.result, ev.expectations) : null;
+      const grading = response.success && typeof response.text === 'string' ? parseGrading(response.text, ev.expectations) : null;
       caseMeta.status = grading && grading.summary.failed === 0 ? 'passed' : 'failed';
       caseMeta.finished_at = new Date().toISOString();
       if (!persistGradingOutcome(base, grading, raw, caseMeta)) {
@@ -756,17 +729,18 @@ function main(args = process.argv.slice(2)) {
       console.error('--min-rank1 applies only to deterministic evals');
       process.exit(1);
     }
-    function modelOption(flag) {
+    function valueOption(flag, label = 'model ID') {
       const index = args.indexOf(flag);
       if (index === -1) return undefined;
       const value = args[index + 1];
-      if (!value || value.startsWith('-')) throw new Error(`${flag} needs a model ID`);
+      if (!value || value.startsWith('-')) throw new Error(`${flag} needs a ${label}`);
       return value;
     }
     try {
       const result = runBehavioral(args[bIdx + 1], {
         dryRun: args.includes('--dry-run'),
-        executorModel: modelOption('--executor-model'), graderModel: modelOption('--grader-model'),
+        executorModel: valueOption('--executor-model'), graderModel: valueOption('--grader-model'),
+        backend: valueOption('--backend', 'backend name'),
       });
       process.exitCode = result.failures ? 1 : 0;
     } catch (error) {
@@ -774,8 +748,8 @@ function main(args = process.argv.slice(2)) {
       process.exitCode = 1;
     }
   } else {
-    if (args.includes('--executor-model') || args.includes('--grader-model')) {
-      console.error('Model options apply only to --behavioral runs');
+    if (args.includes('--executor-model') || args.includes('--grader-model') || args.includes('--backend')) {
+      console.error('Backend and model options apply only to --behavioral runs');
       process.exitCode = 1;
       return;
     }
