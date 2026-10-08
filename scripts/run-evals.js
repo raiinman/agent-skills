@@ -35,6 +35,7 @@ const path = require('path');
 const { createHash } = require('node:crypto');
 const { execFileSync } = require('child_process');
 const { getEvalBackend, extractExecutorModel } = require('./lib/eval-backends');
+const { invokeCliSync } = require('./lib/invoke-cli');
 
 const ROOT = path.join(__dirname, '..');
 const SKILLS_DIR = path.join(ROOT, 'skills');
@@ -200,6 +201,42 @@ function resolveFixturePath(root, rel) {
   return resolvedPath;
 }
 
+function assertOrdinaryFixtureDirectory(directory) {
+  const stat = fs.lstatSync(directory);
+  if (!stat.isDirectory() || stat.isSymbolicLink()) {
+    throw new Error(`Fixture directory must be an ordinary directory, not a symbolic link: ${directory}`);
+  }
+}
+
+function validatePackageFixtureBoundary(root) {
+  // The package root is the trust anchor. Inspect only package-relative
+  // directories; OS ancestors such as macOS /var may legitimately be links.
+  let current = path.resolve(root);
+  for (const part of ['evals', 'fixtures']) {
+    current = path.join(current, part);
+    if (!fs.lstatSync(current, { throwIfNoEntry: false })) break;
+    assertOrdinaryFixtureDirectory(current);
+  }
+}
+
+function resolveFixtureInput(root, rel) {
+  assertOrdinaryFixtureDirectory(path.resolve(root));
+  const source = resolveFixturePath(root, rel);
+  const resolvedRoot = path.resolve(root);
+  let current = resolvedRoot;
+  // A selected ordinary leaf can still traverse a linked directory. Inspect
+  // every existing component beneath the caller's trusted fixture root before
+  // reading/copying it; this refuses static links, not hostile ancestor races.
+  for (const part of path.relative(resolvedRoot, source).split(path.sep)) {
+    current = path.join(current, part);
+    if (part.toLowerCase() === '.git') throw new Error(`Fixture path contains Git metadata: ${rel}`);
+    const stat = fs.lstatSync(current, { throwIfNoEntry: false });
+    if (!stat) break;
+    if (stat.isSymbolicLink()) throw new Error(`Fixture path must not traverse symbolic links: ${current}`);
+  }
+  return source;
+}
+
 // ---------- tier 2 ----------
 
 function runDeterministic(minRank1) {
@@ -280,7 +317,7 @@ function runDeterministic(minRank1) {
         for (const rel of ev.files) {
           let fixture;
           try {
-            fixture = resolveFixturePath(FIXTURES_DIR, rel);
+            fixture = resolveFixtureInput(FIXTURES_DIR, rel);
           } catch (e) {
             console.log(`  ✗  ${c.file}: eval id=${ev.id} has invalid fixture path "${rel}" — ${e.message}`);
             errors++;
@@ -394,17 +431,37 @@ function runDeterministic(minRank1) {
 
 // ---------- tier 3 (opt-in, via selected headless backend) ----------
 
+const GIT_SETUP_ENV_KEYS = new Set(['PATH', 'SYSTEMROOT', 'WINDIR', 'COMSPEC', 'PATHEXT', 'TMP', 'TEMP', 'TMPDIR', 'LANG', 'LC_ALL', 'TZ']);
+
+function isolatedGitEnvironment(emptyConfig, minimal = false) {
+  const env = Object.fromEntries(Object.entries(process.env).filter(([key]) =>
+    !key.toUpperCase().startsWith('GIT_') && (!minimal || GIT_SETUP_ENV_KEYS.has(key.toUpperCase()))));
+  return { ...env, GIT_CONFIG_GLOBAL: emptyConfig, GIT_CONFIG_SYSTEM: emptyConfig, GIT_CONFIG_NOSYSTEM: '1' };
+}
+
+function rejectGitMetadata(source) {
+  if (path.basename(source).toLowerCase() === '.git') throw new Error(`Fixture contains Git metadata: ${source}`);
+  const stat = fs.lstatSync(source);
+  if (stat.isSymbolicLink()) throw new Error(`Fixture must not contain symbolic links: ${source}`);
+  if (stat.isDirectory()) {
+    for (const name of fs.readdirSync(source)) rejectGitMetadata(path.join(source, name));
+  }
+}
+
 function materializeWorkspace(ev, fixturesDir = FIXTURES_DIR) {
+  assertOrdinaryFixtureDirectory(path.resolve(fixturesDir));
   // Fresh throwaway project dir per eval; fixtures (if any) copied in so the
   // agent has real code to operate on rather than describing what it would do.
   const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-skills-eval-'));
   try {
     const setupDirs = new Set();
     for (const rel of ev.files || []) {
-      const src = resolveFixturePath(fixturesDir, rel);
+      const src = resolveFixtureInput(fixturesDir, rel);
       if (!fs.existsSync(src)) {
         throw new Error(`fixture listed in files[] not found: evals/fixtures/${rel}`);
       }
+      if (rel.split(/[\\/]/).some((part) => part.toLowerCase() === '.git')) throw new Error(`Fixture path contains Git metadata: ${rel}`);
+      rejectGitMetadata(src);
       const dest = resolveFixturePath(workspace, rel);
       fs.mkdirSync(path.dirname(dest), { recursive: true });
       fs.cpSync(src, dest, { recursive: true });
@@ -420,19 +477,28 @@ function materializeWorkspace(ev, fixturesDir = FIXTURES_DIR) {
     // Give workflow-oriented evals a real baseline to inspect, modify, diff, and
     // commit. A local identity keeps this deterministic and never leaves the
     // throwaway workspace.
-    execFileSync('git', ['init', '--quiet'], { cwd: workspace });
+    const policy = path.join(workspace, '.git', 'eval-policy');
+    fs.mkdirSync(path.join(policy, 'hooks'), { recursive: true });
+    const emptyConfig = path.join(policy, 'empty-config');
+    fs.writeFileSync(emptyConfig, '');
+    const git = (args, options = {}) => execFileSync('git', args, {
+      cwd: workspace, env: isolatedGitEnvironment(emptyConfig, true), windowsHide: true, ...options,
+    });
+    git(['init', '--quiet', '--template=', '--initial-branch=main']);
     // Detached maintenance can outlive a fixture commit and race workspace
     // removal. These repositories live for one eval and need no housekeeping.
-    execFileSync('git', ['config', 'maintenance.auto', 'false'], { cwd: workspace });
-    execFileSync('git', ['config', 'gc.auto', '0'], { cwd: workspace });
-    execFileSync('git', ['config', 'core.autocrlf', 'false'], { cwd: workspace });
-    execFileSync('git', ['config', 'user.name', 'Skill Eval'], { cwd: workspace });
-    execFileSync('git', ['config', 'user.email', 'skill-eval@example.invalid'], { cwd: workspace });
-    execFileSync('git', ['add', '--all'], { cwd: workspace });
-    execFileSync('git', ['commit', '--quiet', '-m', 'fixture baseline'], { cwd: workspace });
+    for (const [key, value] of Object.entries({
+      'maintenance.auto': 'false', 'gc.auto': '0', 'core.autocrlf': 'false', 'core.safecrlf': 'false',
+      'core.hooksPath': path.join(policy, 'hooks'), 'core.attributesFile': emptyConfig,
+      'core.excludesFile': emptyConfig, 'core.fsmonitor': 'false', 'commit.gpgSign': 'false', 'tag.gpgSign': 'false',
+      'user.name': 'Skill Eval', 'user.email': 'skill-eval@example.invalid',
+    })) git(['config', '--local', key, value]);
+    // Input files ignored by the fixture's own .gitignore still belong in the
+    // evaluation baseline. They are archived inputs, not a developer checkout.
+    git(['add', '--all', '--force']);
+    git(['commit', '--quiet', '--allow-empty', '-m', 'fixture baseline']);
     for (const workingTreePatch of workingTreePatches) {
-      execFileSync('git', ['apply', '--whitespace=nowarn', '-'], {
-        cwd: workspace,
+      git(['apply', '--whitespace=nowarn', '-'], {
         input: workingTreePatch,
         encoding: 'utf8',
       });
@@ -442,6 +508,114 @@ function materializeWorkspace(ev, fixturesDir = FIXTURES_DIR) {
     fs.rmSync(workspace, { recursive: true, force: true });
     throw error;
   }
+}
+
+// Preserve observable file evidence without following executor-created links.
+// A bounded archive avoids retaining an unlimited dependency/build tree; every
+// omission remains visible rather than being represented as a complete copy.
+function boundedFileBytes(file, inspected, capacity) {
+  if (!inspected.isFile()) return { reason: 'source-changed' };
+  if (inspected.size > BigInt(capacity)) return { reason: 'archive-size-limit' };
+  // Some filesystems cannot supply useful leaf identity. Do not claim a
+  // verified copy when the before/open/after identity cannot be compared.
+  if (inspected.ino === 0n) return { reason: 'unverifiable-leaf-identity' };
+  const matches = (stat) => stat.isFile() && stat.dev === inspected.dev && stat.ino === inspected.ino &&
+    stat.size === inspected.size && stat.mtimeNs === inspected.mtimeNs && stat.ctimeNs === inspected.ctimeNs;
+  let fd;
+  try {
+    // Unix supports atomic refusal of a symlink leaf. Windows does not expose
+    // O_NOFOLLOW here; verify lstat/fstat identity before reading any bytes.
+    // Nonblocking open also prevents a raced FIFO leaf from blocking on Unix.
+    fd = fs.openSync(file, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW || 0) | (fs.constants.O_NONBLOCK || 0));
+    if (!matches(fs.fstatSync(fd, { bigint: true })) || !matches(fs.lstatSync(file, { bigint: true }))) {
+      return { reason: 'source-changed' };
+    }
+    const bytes = Buffer.alloc(Number(inspected.size));
+    let offset = 0;
+    while (offset < bytes.length) {
+      const read = fs.readSync(fd, bytes, offset, Math.min(64 * 1024, bytes.length - offset), offset);
+      if (!read) return { reason: 'source-changed' };
+      offset += read;
+    }
+    if (!matches(fs.fstatSync(fd, { bigint: true })) || !matches(fs.lstatSync(file, { bigint: true }))) {
+      return { reason: 'source-changed' };
+    }
+    return { bytes };
+  } catch (error) {
+    if (['ELOOP', 'ENOENT', 'ENOTDIR'].includes(error.code)) return { reason: 'source-changed' };
+    if (['ENOTSUP', 'EOPNOTSUPP', 'EINVAL'].includes(error.code)) return { reason: 'unsupported-file-open' };
+    if (['EACCES', 'EPERM'].includes(error.code)) return { reason: 'source-unreadable' };
+    throw error;
+  } finally {
+    if (fd !== undefined) fs.closeSync(fd);
+  }
+}
+
+function snapshotWorkspace(source, destination, limit = 64 * 1024 * 1024) {
+  if (!Number.isSafeInteger(limit) || limit < 0) throw new Error('Workspace archive byte limit must be a nonnegative safe integer');
+  const rootStat = fs.lstatSync(source);
+  if (!rootStat.isDirectory() || rootStat.isSymbolicLink()) throw new Error('Workspace evidence root must remain an ordinary directory');
+  fs.mkdirSync(destination, { recursive: true });
+  const entries = [];
+  let retainedBytes = 0;
+  function visit(directory) {
+    for (const name of fs.readdirSync(directory).sort()) {
+      if (name.toLowerCase() === '.git') continue;
+      const file = path.join(directory, name);
+      const relative = path.relative(source, file).split(path.sep).join('/');
+      const stat = fs.lstatSync(file, { bigint: true });
+      const output = path.join(destination, relative);
+      if (stat.isDirectory()) {
+        fs.mkdirSync(output, { recursive: true });
+        entries.push({ path: relative, type: 'directory' });
+        visit(file);
+      } else if (stat.isSymbolicLink()) {
+        entries.push({ path: relative, type: 'symlink', target: fs.readlinkSync(file), retained: false });
+      } else if (stat.isFile()) {
+        const result = boundedFileBytes(file, stat, limit - retainedBytes);
+        if (!result.bytes) {
+          entries.push({ path: relative, type: 'file', size: Number(stat.size), retained: false, reason: result.reason });
+          continue;
+        }
+        const { bytes } = result;
+        fs.mkdirSync(path.dirname(output), { recursive: true });
+        fs.writeFileSync(output, bytes, { mode: Number(stat.mode) });
+        retainedBytes += bytes.length;
+        entries.push({ path: relative, type: 'file', size: bytes.length, mode: Number(stat.mode),
+          sha256: createHash('sha256').update(bytes).digest('hex'), retained: true });
+      } else entries.push({ path: relative, type: 'special', retained: false });
+    }
+  }
+  visit(source);
+  return { complete: entries.every((entry) => entry.retained !== false), retained_bytes: retainedBytes,
+    byte_limit: limit, sha256: createHash('sha256').update(JSON.stringify(entries)).digest('hex'), entries };
+}
+
+function readWorkspaceCommit(workspace) {
+  // After execution, repository config is model-controlled. Even `git status`
+  // can execute configured clean filters/fsmonitor commands outside the model
+  // sandbox. Read bounded, ordinary metadata files instead of invoking Git.
+  function read(relative, maxBytes = 1024) {
+    let current = workspace;
+    for (const part of relative.split('/')) {
+      current = path.join(current, part);
+      const stat = fs.lstatSync(current);
+      if (stat.isSymbolicLink()) return null;
+    }
+    const stat = fs.lstatSync(current, { bigint: true });
+    return boundedFileBytes(current, stat, maxBytes).bytes?.toString('utf8') || null;
+  }
+  try {
+    const head = read('.git/HEAD')?.trim();
+    if (/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(head || '')) return head;
+    const ref = head?.match(/^ref: (refs\/[A-Za-z0-9_.\/-]+)$/)?.[1];
+    if (!ref || ref.split('/').some((part) => part === '' || part === '.' || part === '..')) return null;
+    let value;
+    try { value = read(`.git/${ref}`)?.trim(); } catch { /* packed reference or removed ref */ }
+    if (/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(value || '')) return value;
+    const packed = read('.git/packed-refs', 1024 * 1024);
+    return packed?.split('\n').find((line) => line.split(' ')[1] === ref)?.match(/^(?:[a-f0-9]{40}|[a-f0-9]{64})(?= )/)?.[0] || null;
+  } catch { return null; }
 }
 
 function parseGrading(raw, expectations) {
@@ -534,8 +708,8 @@ function hashTree(directory) {
   return hash.digest('hex');
 }
 
-function gitValue(root, args) {
-  try { return execFileSync('git', args, { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim(); }
+function gitValue(root, args, env) {
+  try { return execFileSync('git', args, { cwd: root, ...(env ? { env } : {}), windowsHide: true, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim(); }
   catch { return null; }
 }
 
@@ -573,9 +747,12 @@ function validateBehavioralCase(data, fixturesDir) {
     if ((ev.files !== undefined && !Array.isArray(ev.files)) ||
       (kind === 'execution' && !ev.files?.length)) throw new Error(`eval ${ev.id} has no valid fixture list`);
     for (const relative of ev.files || []) {
-      if (typeof relative !== 'string' || !fs.existsSync(resolveFixturePath(fixturesDir, relative))) {
+      if (typeof relative !== 'string') {
         throw new Error(`eval ${ev.id} fixture not found: ${relative}`);
       }
+      const source = resolveFixtureInput(fixturesDir, relative);
+      if (!fs.existsSync(source)) throw new Error(`eval ${ev.id} fixture not found: ${relative}`);
+      rejectGitMetadata(source);
     }
   }
 }
@@ -583,11 +760,12 @@ function validateBehavioralCase(data, fixturesDir) {
 function runBehavioral(skillName, options = {}) {
   const { dryRun = false, executorModel, graderModel, root = ROOT } = options;
   const backend = getEvalBackend(options.backend || 'claude');
-  const invokeCli = (backend.name === 'codex' ? options.invokeCodex : options.invokeClaude) || execFileSync;
+  const invokeCli = (backend.name === 'codex' ? options.invokeCodex : options.invokeClaude) || invokeCliSync;
   if (!skillName || !VALID_SKILL_NAME.test(skillName)) throw new Error(`Invalid skill name: "${skillName}" — must be kebab-case`);
   if (!dryRun && (!executorModel?.trim() || !graderModel?.trim())) {
     throw new Error('Live behavioral runs require --executor-model and --grader-model; use exact model IDs for comparisons');
   }
+  validatePackageFixtureBoundary(root);
   const caseFile = path.join(root, 'evals', 'cases', `${skillName}.json`);
   if (!fs.existsSync(caseFile)) throw new Error(`No eval case file for "${skillName}"`);
   if (!fs.existsSync(path.join(root, 'skills', skillName, 'SKILL.md'))) throw new Error(`No skill package for "${skillName}"`);
@@ -616,20 +794,26 @@ function runBehavioral(skillName, options = {}) {
   const savedFixtures = path.join(runDir, 'fixtures');
   fs.mkdirSync(savedFixtures);
   for (const relative of new Set(data.evals.flatMap((ev) => ev.files || []))) {
+    const source = resolveFixtureInput(fixturesDir, relative);
+    rejectGitMetadata(source);
     const destination = resolveFixturePath(savedFixtures, relative);
     fs.mkdirSync(path.dirname(destination), { recursive: true });
-    fs.cpSync(resolveFixturePath(fixturesDir, relative), destination, { recursive: true, dereference: true });
+    fs.cpSync(source, destination, { recursive: true });
   }
-  const dirty = gitValue(root, ['status', '--porcelain']);
+  const emptyProvenanceConfig = path.join(runDir, 'empty-git-config');
+  fs.writeFileSync(emptyProvenanceConfig, '');
+  const provenanceEnv = isolatedGitEnvironment(emptyProvenanceConfig, true);
+  const dirty = gitValue(root, ['status', '--porcelain'], provenanceEnv);
   const runMeta = {
     timestamp: startedAt,
-    repository_commit: gitValue(root, ['rev-parse', 'HEAD']),
+    repository_commit: gitValue(root, ['rev-parse', 'HEAD'], provenanceEnv),
     repository_dirty: dirty === null ? null : dirty !== '',
     backend: backend.name, skill_loading: backend.skillLoading, cli_version: cliVersion,
     [`${backend.name}_version`]: cliVersion, node_version: process.version, platform: process.platform,
     plugin_name: manifest.name, plugin_version: manifest.version || null,
     package_sha256: hashTree(packageDir), fixtures_sha256: hashTree(savedFixtures),
     case_sha256: createHash('sha256').update(caseSource).digest('hex'),
+    git_isolation: 'minimal-setup-env; empty-system/global-config; no-templates; local-hooks/signing/maintenance-disabled',
     executor_model_requested: executorModel, grader_model_requested: graderModel,
   };
   writeJson(path.join(runDir, 'run.json'), { ...runMeta, status: 'running' });
@@ -639,12 +823,21 @@ function runBehavioral(skillName, options = {}) {
     const base = path.join(runDir, `${skillName}.eval-${ev.id}`);
     let workspace;
     let graderWorkspace;
+    let executorEnv;
     let phase = 'setup';
     const caseMeta = { ...runMeta, eval_id: ev.id, kind, status: 'running' };
     try {
-      workspace = kind === 'dialogue' && !ev.files?.length
+      const fixturelessDialogue = kind === 'dialogue' && !ev.files?.length;
+      workspace = fixturelessDialogue
         ? fs.mkdtempSync(path.join(os.tmpdir(), 'agent-skills-dialogue-eval-'))
         : materializeWorkspace(ev, savedFixtures);
+      executorEnv = isolatedGitEnvironment(fixturelessDialogue ? emptyProvenanceConfig
+        : path.join(workspace, '.git', 'eval-policy', 'empty-config'));
+      caseMeta.baseline_commit = gitValue(workspace, ['rev-parse', 'HEAD'], executorEnv);
+      const initialFiles = snapshotWorkspace(workspace, `${base}.initial-workspace`);
+      writeJson(`${base}.initial-workspace.json`, initialFiles);
+      caseMeta.initial_workspace_sha256 = initialFiles.sha256;
+      caseMeta.initial_workspace_complete = initialFiles.complete;
       graderWorkspace = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-skills-grader-'));
       const executorArgs = backend.executorArguments({ model: executorModel, packageDir, skillName, manifest, workspace });
       const executorPrompt = backend.executorPrompt({ prompt: ev.prompt, packageDir, skillName });
@@ -655,7 +848,7 @@ function runBehavioral(skillName, options = {}) {
       console.log(`eval ${ev.id}: executing ${kind} eval in ${workspace} ...`);
       phase = 'executor';
       const trace = invokeCli(backend.command, executorArgs, {
-        input: executorPrompt, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, cwd: workspace, timeout: EXECUTOR_TIMEOUT_MS,
+        input: executorPrompt, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, cwd: workspace, env: executorEnv, timeout: EXECUTOR_TIMEOUT_MS,
       });
       fs.writeFileSync(`${base}.trace.jsonl`, trace);
       const execution = backend.parseExecution(trace);
@@ -676,7 +869,8 @@ function runBehavioral(skillName, options = {}) {
       ].join('\n\n');
       phase = 'grader';
       const raw = invokeCli(backend.command, graderArgs, {
-        input: graderPrompt, encoding: 'utf8', maxBuffer: 16 * 1024 * 1024, cwd: graderWorkspace, timeout: GRADER_TIMEOUT_MS,
+        input: graderPrompt, encoding: 'utf8', maxBuffer: 16 * 1024 * 1024, cwd: graderWorkspace,
+        env: executorEnv, timeout: GRADER_TIMEOUT_MS,
       });
       fs.writeFileSync(`${base}.grader-response.${backend.graderExtension}`, raw);
       const response = backend.parseGrading(raw);
@@ -700,6 +894,18 @@ function runBehavioral(skillName, options = {}) {
       if (error.stderr !== undefined) fs.writeFileSync(`${base}.${phase}.stderr.txt`, String(error.stderr));
       console.error(`eval ${ev.id}: ${phase} failed: ${error.message}; evidence retained in ${path.relative(root, runDir)}`);
     } finally {
+      if (workspace) {
+        try {
+          const finalFiles = snapshotWorkspace(workspace, `${base}.final-workspace`);
+          writeJson(`${base}.final-workspace.json`, finalFiles);
+          Object.assign(caseMeta, { final_workspace_sha256: finalFiles.sha256, final_workspace_complete: finalFiles.complete,
+            final_commit: readWorkspaceCommit(workspace) });
+        } catch (error) {
+          if (caseMeta.status !== 'failed') failures++;
+          caseMeta.status = 'failed';
+          caseMeta.evidence_error = error.message;
+        }
+      }
       writeJson(`${base}.run.json`, caseMeta);
       for (const directory of [workspace, graderWorkspace]) {
         if (!directory) continue;
@@ -711,6 +917,13 @@ function runBehavioral(skillName, options = {}) {
           writeJson(`${base}.run.json`, caseMeta);
           console.error(`eval ${ev.id}: could not remove temporary workspace ${directory}: ${error.message}`);
         }
+      }
+      // The grading file and execution metadata must agree after artifact
+      // retention and cleanup, not just at the moment the grader responded.
+      const gradingFile = `${base}.grading.json`;
+      if (fs.existsSync(gradingFile)) {
+        const grading = JSON.parse(fs.readFileSync(gradingFile, 'utf8'));
+        writeJson(gradingFile, { ...grading, run: caseMeta });
       }
     }
   }
@@ -769,4 +982,4 @@ function main(args = process.argv.slice(2)) {
 
 if (require.main === module) main();
 
-module.exports = { materializeWorkspace, parseGrading, clearGradingSlot, persistGradingOutcome, extractExecutorModel, runBehavioral, tokenize, buildCorpus, rankSkills };
+module.exports = { materializeWorkspace, snapshotWorkspace, parseGrading, clearGradingSlot, persistGradingOutcome, extractExecutorModel, runBehavioral, tokenize, buildCorpus, rankSkills };

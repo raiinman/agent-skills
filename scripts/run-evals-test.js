@@ -8,7 +8,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 const test = require('node:test');
-const { materializeWorkspace, parseGrading, clearGradingSlot, persistGradingOutcome, extractExecutorModel, tokenize, buildCorpus, rankSkills } = require('./run-evals');
+const { materializeWorkspace, snapshotWorkspace, runBehavioral, parseGrading, clearGradingSlot, persistGradingOutcome, extractExecutorModel, tokenize, buildCorpus, rankSkills } = require('./run-evals');
 
 const RUNNER = path.join(__dirname, 'run-evals.js');
 
@@ -81,6 +81,7 @@ function makeSandbox() {
   fs.copyFileSync(RUNNER, path.join(root, 'scripts', 'run-evals.js'));
   fs.mkdirSync(path.join(root, 'scripts', 'lib'), { recursive: true });
   fs.copyFileSync(path.join(__dirname, 'lib', 'eval-backends.js'), path.join(root, 'scripts', 'lib', 'eval-backends.js'));
+  fs.copyFileSync(path.join(__dirname, 'lib', 'invoke-cli.js'), path.join(root, 'scripts', 'lib', 'invoke-cli.js'));
   fs.writeFileSync(path.join(root, 'evals', 'fixtures', 'project', 'context.txt'), 'fixture\n');
   return root;
 }
@@ -691,6 +692,13 @@ test('fixture setup does not launch background maintenance that can outlive clea
     process.env.GIT_CONFIG_GLOBAL = globalConfig;
     process.env.GIT_TRACE2_EVENT = traceFile;
     workspace = materializeWorkspace({ files: ['git-workflow-and-versioning'] });
+    assert.equal(fs.existsSync(traceFile), false, 'setup must not inherit Git diagnostic output destinations');
+    const probe = spawnSync('git', ['-c', 'user.name=Probe', '-c', 'user.email=probe@example.invalid',
+      'commit', '--allow-empty', '-m', 'maintenance probe'], {
+      cwd: workspace, encoding: 'utf8',
+      env: { ...process.env, GIT_CONFIG_GLOBAL: path.join(workspace, '.git', 'eval-policy', 'empty-config') },
+    });
+    assert.equal(probe.status, 0, probe.stdout + probe.stderr);
     const events = fs.readFileSync(traceFile, 'utf8').trim().split('\n').map(JSON.parse);
     const maintenance = events.filter((event) => event.event === 'child_start' &&
       event.argv.some((arg) => arg === 'maintenance' || arg === 'gc'));
@@ -701,6 +709,347 @@ test('fixture setup does not launch background maintenance that can outlive clea
       else process.env[name] = value;
     }
     if (workspace) fs.rmSync(workspace, { recursive: true, force: true });
+    fs.rmSync(scratch, { recursive: true, force: true });
+  }
+});
+
+function withEnvironment(values, callback) {
+  const previous = Object.fromEntries(Object.keys(values).map((name) => [name, process.env[name]]));
+  try {
+    for (const [name, value] of Object.entries(values)) process.env[name] = value;
+    return callback();
+  } finally {
+    for (const [name, value] of Object.entries(previous)) {
+      if (value === undefined) delete process.env[name];
+      else process.env[name] = value;
+    }
+  }
+}
+
+test('real Git setup ignores global hooks, templates, signing, excludes, and injected config', () => {
+  const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'eval-git-isolation-'));
+  const fixtures = path.join(scratch, 'fixtures');
+  const hooks = path.join(scratch, 'hooks');
+  const templates = path.join(scratch, 'templates');
+  const config = path.join(scratch, 'global-config');
+  const excludes = path.join(scratch, 'excludes');
+  let workspace;
+  try {
+    fs.mkdirSync(path.join(fixtures, 'project'), { recursive: true });
+    fs.writeFileSync(path.join(fixtures, 'project', 'context.txt'), 'EXPECTED FIXTURE\r\n');
+    fs.mkdirSync(hooks);
+    const hook = '#!/bin/sh\nprintf "HOOK CHANGED INPUT\\n" > project/context.txt\ngit add project/context.txt\n';
+    fs.writeFileSync(path.join(hooks, 'pre-commit'), hook, { mode: 0o755 });
+    fs.mkdirSync(path.join(templates, 'hooks'), { recursive: true });
+    fs.writeFileSync(path.join(templates, 'hooks', 'pre-commit'), hook, { mode: 0o755 });
+    fs.writeFileSync(path.join(templates, 'template-proof'), 'unwanted template');
+    fs.writeFileSync(excludes, '*.txt\n');
+    const gitPath = (value) => value.replaceAll('\\', '/');
+    fs.writeFileSync(config, `[core]\n\thooksPath = "${gitPath(hooks)}"\n\texcludesFile = "${gitPath(excludes)}"\n\tautocrlf = true\n[commit]\n\tgpgSign = true\n[gpg]\n\tprogram = missing-eval-signing-tool\n`);
+    withEnvironment({ GIT_CONFIG_GLOBAL: config, GIT_CONFIG_SYSTEM: config, GIT_TEMPLATE_DIR: templates,
+      GIT_CONFIG_COUNT: '1', GIT_CONFIG_KEY_0: 'core.hooksPath', GIT_CONFIG_VALUE_0: hooks }, () => {
+      workspace = materializeWorkspace({ files: ['project'] }, fixtures);
+      assert.equal(fs.readFileSync(path.join(workspace, 'project', 'context.txt'), 'utf8'), 'EXPECTED FIXTURE\r\n');
+      assert.equal(fs.existsSync(path.join(workspace, '.git', 'template-proof')), false);
+    });
+    const env = { ...process.env, GIT_CONFIG_GLOBAL: config, GIT_CONFIG_SYSTEM: config, GIT_CONFIG_NOSYSTEM: '1' };
+    const show = spawnSync('git', ['show', 'HEAD:project/context.txt'], { cwd: workspace, env, encoding: 'utf8' });
+    assert.equal(show.status, 0, show.stderr);
+    assert.equal(show.stdout, 'EXPECTED FIXTURE\r\n', 'committed bytes must match archived inputs');
+    const commit = spawnSync('git', ['commit', '--allow-empty', '-m', 'executor save point'], { cwd: workspace, env, encoding: 'utf8' });
+    assert.equal(commit.status, 0, commit.stderr);
+    assert.equal(fs.readFileSync(path.join(workspace, 'project', 'context.txt'), 'utf8'), 'EXPECTED FIXTURE\r\n', 'local hook/signing policy persists for executor commits');
+  } finally {
+    if (workspace) fs.rmSync(workspace, { recursive: true, force: true });
+    fs.rmSync(scratch, { recursive: true, force: true });
+  }
+});
+
+test('fixture setup rejects embedded Git metadata rather than reinitializing it', () => {
+  const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'eval-embedded-git-'));
+  try {
+    fs.mkdirSync(path.join(scratch, 'project', '.git'), { recursive: true });
+    fs.writeFileSync(path.join(scratch, 'project', '.git', 'config'), '[core]\n\thooksPath = hostile\n');
+    assert.throws(() => materializeWorkspace({ files: ['project'] }, scratch), /Git metadata/);
+  } finally { fs.rmSync(scratch, { recursive: true, force: true }); }
+});
+
+test('a selected ordinary fixture leaf cannot traverse an external linked ancestor', () => {
+  const root = makeSandbox();
+  try {
+    const fixtures = path.join(root, 'evals', 'fixtures');
+    const outside = path.join(root, 'outside-fixtures');
+    fs.mkdirSync(path.join(outside, 'nested'), { recursive: true });
+    fs.writeFileSync(path.join(outside, 'nested', 'private.txt'), 'outside fixture boundary\n');
+    fs.symlinkSync(outside, path.join(fixtures, 'project', 'linked'), process.platform === 'win32' ? 'junction' : 'dir');
+    const selected = 'project/linked/nested/private.txt';
+    assert.equal(fs.lstatSync(path.join(fixtures, selected)).isFile(), true,
+      'the selected leaf itself is ordinary; its ancestor is the forbidden link');
+    assert.throws(() => materializeWorkspace({ files: [selected] }, fixtures), /must not traverse symbolic links/);
+
+    writeSkill(root, 'alpha-skill', 'Handles widgets.');
+    writeJson(path.join(root, '.claude-plugin', 'plugin.json'), { name: 'eval-test', version: '1.0.0' });
+    writeJson(path.join(root, 'evals', 'cases', 'alpha-skill.json'), {
+      skill_name: 'alpha-skill', evals: [behavioralEval([selected])],
+    });
+    let calls = 0;
+    assert.throws(() => runBehavioral('alpha-skill', {
+      root, executorModel: 'fake-executor', graderModel: 'fake-grader',
+      invokeClaude: () => { calls++; throw new Error('CLI must not be called'); },
+    }), /must not traverse symbolic links/);
+    assert.equal(calls, 0, 'fixture rejection must precede even CLI version detection');
+    assert.equal(fs.existsSync(path.join(root, 'evals', 'results')), false,
+      'invalid fixture bytes and package inputs must not be snapshotted');
+    assert.equal(fs.readFileSync(path.join(outside, 'nested', 'private.txt'), 'utf8'), 'outside fixture boundary\n');
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
+test('linked fixture roots and package-relative eval ancestors fail before snapshots or CLI calls', () => {
+  for (const relative of ['evals/fixtures', 'evals']) {
+    const root = makeSandbox();
+    try {
+      writeSkill(root, 'alpha-skill', 'Handles widgets.');
+      writeJson(path.join(root, '.claude-plugin', 'plugin.json'), { name: 'eval-test', version: '1.0.0' });
+      writeJson(path.join(root, 'evals', 'cases', 'alpha-skill.json'), {
+        skill_name: 'alpha-skill', evals: [behavioralEval()],
+      });
+      const linkedDirectory = path.join(root, relative);
+      const outside = path.join(root, 'outside-selected-directory');
+      fs.renameSync(linkedDirectory, outside);
+      fs.symlinkSync(outside, linkedDirectory, process.platform === 'win32' ? 'junction' : 'dir');
+      assert.equal(fs.lstatSync(path.join(root, 'evals', 'fixtures', 'project', 'context.txt')).isFile(), true);
+      if (relative === 'evals/fixtures') {
+        assert.throws(() => materializeWorkspace({ files: ['project/context.txt'] }, linkedDirectory), /ordinary directory/,
+          'a caller-supplied fixture root itself must not be linked');
+      }
+      let calls = 0;
+      assert.throws(() => runBehavioral('alpha-skill', {
+        root, executorModel: 'fake-executor', graderModel: 'fake-grader',
+        invokeClaude: () => { calls++; throw new Error('CLI must not be called'); },
+      }), /ordinary directory/, relative);
+      assert.equal(calls, 0, `${relative} rejection must precede CLI version detection`);
+      assert.equal(fs.existsSync(path.join(root, 'evals', 'results')), false,
+        `${relative} rejection must precede input snapshots`);
+    } finally { fs.rmSync(root, { recursive: true, force: true }); }
+  }
+});
+
+test('workspace evidence records archive omissions rather than silently claiming completeness', () => {
+  const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'eval-evidence-limit-'));
+  try {
+    const source = path.join(scratch, 'source');
+    const destination = path.join(scratch, 'archive');
+    fs.mkdirSync(path.join(source, '.git'), { recursive: true });
+    fs.writeFileSync(path.join(source, '.git', 'config'), 'not artifact evidence');
+    fs.writeFileSync(path.join(source, 'small.txt'), 'abc');
+    fs.writeFileSync(path.join(source, 'z-large.txt'), 'too large');
+    const result = snapshotWorkspace(source, destination, 3);
+    assert.equal(result.complete, false);
+    assert.equal(result.retained_bytes, 3);
+    assert.equal(fs.readFileSync(path.join(destination, 'small.txt'), 'utf8'), 'abc');
+    assert.equal(fs.existsSync(path.join(destination, '.git')), false);
+    assert.equal(fs.existsSync(path.join(destination, 'z-large.txt')), false);
+    assert.equal(result.entries.find((entry) => entry.path === 'z-large.txt').reason, 'archive-size-limit');
+  } finally { fs.rmSync(scratch, { recursive: true, force: true }); }
+});
+
+test('fake executor retains exact initial patch and final files even when execution fails', () => {
+  const root = makeSandbox();
+  const context = path.join(root, 'evals', 'fixtures', 'project', 'context.txt');
+  try {
+    writeSkill(root, 'alpha-skill', 'Handles widgets.');
+    writeJson(path.join(root, '.claude-plugin', 'plugin.json'), { name: 'eval-test', version: '1.0.0' });
+    writeJson(path.join(root, 'evals', 'cases', 'alpha-skill.json'), { skill_name: 'alpha-skill', evals: [behavioralEval(['project'])] });
+    fs.mkdirSync(path.join(path.dirname(context), '.eval'));
+    fs.writeFileSync(path.join(path.dirname(context), '.eval', 'working-tree.patch'),
+      'diff --git a/project/context.txt b/project/context.txt\n--- a/project/context.txt\n+++ b/project/context.txt\n@@ -1 +1 @@\n-fixture\n+patched input\n');
+    const result = withEnvironment({ GIT_DIR: path.join(root, 'wrong-repository'), GIT_CONFIG_COUNT: '1',
+      GIT_CONFIG_KEY_0: 'core.hooksPath', GIT_CONFIG_VALUE_0: 'wrong-hooks' }, () => runBehavioral('alpha-skill', {
+      root, executorModel: 'fake-executor', graderModel: 'fake-grader',
+      invokeClaude: (_command, args, options) => {
+        if (args.includes('--version')) return 'fake CLI';
+        assert.equal(options.env.GIT_DIR, undefined);
+        assert.equal(options.env.GIT_CONFIG_COUNT, undefined);
+        assert.equal(fs.readFileSync(path.join(options.cwd, 'project', 'context.txt'), 'utf8'), 'patched input\n');
+        fs.writeFileSync(path.join(options.cwd, 'project', 'context.txt'), 'executor changed input\n');
+        fs.writeFileSync(path.join(options.cwd, 'new.txt'), 'untracked result\n');
+        const monitor = path.join(options.cwd, '.git', 'evidence-probe.js');
+        fs.writeFileSync(monitor, `require('node:fs').writeFileSync(${JSON.stringify(path.join(root, 'unsafe-evidence-probe'))}, 'executed'); process.stdout.write('token\\0\\0');`);
+        const configure = spawnSync('git', ['config', '--local', 'core.fsmonitor',
+          `"${process.execPath.replaceAll('\\', '/')}" "${monitor.replaceAll('\\', '/')}"`],
+        { cwd: options.cwd, env: options.env, encoding: 'utf8' });
+        assert.equal(configure.status, 0, configure.stderr);
+        const failure = new Error('fake execution failure');
+        failure.stdout = 'partial trace';
+        throw failure;
+      },
+    }));
+    assert.equal(result.failures, 1);
+    const base = path.join(result.runDir, 'alpha-skill.eval-1');
+    assert.equal(fs.readFileSync(path.join(`${base}.initial-workspace`, 'project', 'context.txt'), 'utf8'), 'patched input\n');
+    assert.equal(fs.readFileSync(path.join(`${base}.final-workspace`, 'project', 'context.txt'), 'utf8'), 'executor changed input\n');
+    assert.equal(fs.readFileSync(path.join(`${base}.final-workspace`, 'new.txt'), 'utf8'), 'untracked result\n');
+    assert.equal(fs.existsSync(path.join(`${base}.initial-workspace`, 'project', '.eval')), false);
+    const meta = JSON.parse(fs.readFileSync(`${base}.run.json`, 'utf8'));
+    assert.match(meta.baseline_commit, /^[a-f0-9]{40,64}$/);
+    assert.match(meta.initial_workspace_sha256, /^[a-f0-9]{64}$/);
+    assert.match(meta.final_workspace_sha256, /^[a-f0-9]{64}$/);
+    assert.notEqual(meta.initial_workspace_sha256, meta.final_workspace_sha256);
+    assert.equal(meta.initial_workspace_complete, true);
+    assert.equal(meta.final_workspace_complete, true);
+    assert.equal(meta.final_commit, meta.baseline_commit);
+    assert.equal(fs.existsSync(path.join(root, 'unsafe-evidence-probe')), false,
+      'evidence collection must not execute model-controlled Git configuration');
+    assert.equal(fs.readFileSync(`${base}.executor.stdout.txt`, 'utf8'), 'partial trace');
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
+test('workspace evidence never follows an executor-created link outside the workspace', () => {
+  const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'eval-evidence-link-'));
+  try {
+    const source = path.join(scratch, 'source');
+    const outside = path.join(scratch, 'outside');
+    const archive = path.join(scratch, 'archive');
+    fs.mkdirSync(source);
+    fs.mkdirSync(outside);
+    fs.writeFileSync(path.join(outside, 'private.txt'), 'must not be archived');
+    fs.symlinkSync(outside, path.join(source, 'external'), process.platform === 'win32' ? 'junction' : 'dir');
+    const result = snapshotWorkspace(source, archive);
+    assert.equal(result.complete, false);
+    assert.equal(result.entries[0].type, 'symlink');
+    assert.equal(fs.existsSync(path.join(archive, 'external', 'private.txt')), false);
+  } finally { fs.rmSync(scratch, { recursive: true, force: true }); }
+});
+
+test('workspace evidence omits a file that grows between inspection and opening', (t) => {
+  const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'eval-evidence-growth-'));
+  try {
+    const source = path.join(scratch, 'source');
+    const archive = path.join(scratch, 'archive');
+    fs.mkdirSync(source);
+    const file = path.join(source, 'growing.log');
+    fs.writeFileSync(file, 'a');
+    const originalLstat = fs.lstatSync;
+    let grew = false;
+    t.mock.method(fs, 'lstatSync', (...args) => {
+      const inspected = originalLstat(...args);
+      if (args[0] === file && !grew) {
+        grew = true;
+        fs.appendFileSync(file, 'x'.repeat(128 * 1024));
+      }
+      return inspected;
+    });
+    const result = snapshotWorkspace(source, archive, 3);
+    assert.equal(grew, true);
+    assert.equal(result.retained_bytes, 0);
+    assert.equal(result.complete, false);
+    assert.equal(result.entries[0].reason, 'source-changed');
+    assert.equal(fs.existsSync(path.join(archive, 'growing.log')), false);
+  } finally {
+    t.mock.restoreAll();
+    fs.rmSync(scratch, { recursive: true, force: true });
+  }
+});
+
+test('workspace evidence bounds reads and omits growth after the file is opened', (t) => {
+  const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'eval-evidence-read-growth-'));
+  try {
+    const source = path.join(scratch, 'source');
+    const archive = path.join(scratch, 'archive');
+    fs.mkdirSync(source);
+    const file = path.join(source, 'growing.log');
+    fs.writeFileSync(file, 'abc');
+    const originalRead = fs.readSync;
+    let grew = false;
+    let requestedBytes = 0;
+    t.mock.method(fs, 'readSync', (...args) => {
+      if (!grew) {
+        grew = true;
+        fs.appendFileSync(file, 'x'.repeat(128 * 1024));
+      }
+      requestedBytes += args[3];
+      return originalRead(...args);
+    });
+    const result = snapshotWorkspace(source, archive, 3);
+    assert.equal(grew, true);
+    assert.ok(requestedBytes <= 3, `collector requested ${requestedBytes} bytes against a 3-byte capacity`);
+    assert.equal(result.retained_bytes, 0);
+    assert.equal(result.complete, false);
+    assert.equal(result.entries[0].reason, 'source-changed');
+    assert.equal(fs.existsSync(path.join(archive, 'growing.log')), false);
+  } finally {
+    t.mock.restoreAll();
+    fs.rmSync(scratch, { recursive: true, force: true });
+  }
+});
+
+test('workspace evidence does not read a replacement leaf with the same size', (t) => {
+  const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'eval-evidence-replaced-leaf-'));
+  try {
+    const source = path.join(scratch, 'source');
+    const archive = path.join(scratch, 'archive');
+    fs.mkdirSync(source);
+    const file = path.join(source, 'result.txt');
+    fs.writeFileSync(file, 'old');
+    const originalLstat = fs.lstatSync;
+    const originalRead = fs.readSync;
+    let replaced = false;
+    let reads = 0;
+    t.mock.method(fs, 'lstatSync', (...args) => {
+      const inspected = originalLstat(...args);
+      if (args[0] === file && !replaced) {
+        replaced = true;
+        fs.renameSync(file, path.join(scratch, 'original-leaf'));
+        fs.writeFileSync(file, 'new');
+      }
+      return inspected;
+    });
+    t.mock.method(fs, 'readSync', (...args) => { reads++; return originalRead(...args); });
+    const result = snapshotWorkspace(source, archive, 3);
+    assert.equal(replaced, true);
+    assert.equal(reads, 0, 'replacement content must be rejected before descriptor reads');
+    assert.equal(result.retained_bytes, 0);
+    assert.equal(result.complete, false);
+    assert.equal(result.entries[0].reason, 'source-changed');
+    assert.equal(fs.existsSync(path.join(archive, 'result.txt')), false);
+  } finally {
+    t.mock.restoreAll();
+    fs.rmSync(scratch, { recursive: true, force: true });
+  }
+});
+
+test('workspace evidence rejects a raced symlink leaf without reading its target', { skip: process.platform === 'win32' }, (t) => {
+  const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'eval-evidence-raced-link-'));
+  try {
+    const source = path.join(scratch, 'source');
+    const archive = path.join(scratch, 'archive');
+    fs.mkdirSync(source);
+    const file = path.join(source, 'result.txt');
+    const outside = path.join(scratch, 'private.txt');
+    fs.writeFileSync(file, 'old');
+    fs.writeFileSync(outside, 'private');
+    const originalLstat = fs.lstatSync;
+    const originalRead = fs.readSync;
+    let replaced = false;
+    let reads = 0;
+    t.mock.method(fs, 'lstatSync', (...args) => {
+      const inspected = originalLstat(...args);
+      if (args[0] === file && !replaced) {
+        replaced = true;
+        fs.unlinkSync(file);
+        fs.symlinkSync(outside, file);
+      }
+      return inspected;
+    });
+    t.mock.method(fs, 'readSync', (...args) => { reads++; return originalRead(...args); });
+    const result = snapshotWorkspace(source, archive, 8);
+    assert.equal(reads, 0);
+    assert.equal(result.retained_bytes, 0);
+    assert.equal(result.complete, false);
+    assert.equal(result.entries[0].reason, 'source-changed');
+    assert.equal(fs.existsSync(path.join(archive, 'result.txt')), false);
+  } finally {
+    t.mock.restoreAll();
     fs.rmSync(scratch, { recursive: true, force: true });
   }
 });
